@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useAuth } from "@/hooks/useAuth";
+import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -107,8 +108,9 @@ function SettingsContent() {
   const activeSection = searchParams?.get("tab") || null;
   const { theme, setTheme } = useTheme();
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -182,10 +184,15 @@ function SettingsContent() {
   const handleToggleEmailAlerts = async (checked: boolean) => {
     if (!user?.id) return;
     setNotifications((prev) => ({ ...prev, alertsEmail: checked }));
-    await supabase
+    const { error } = await supabase
       .from("profiles")
       .update({ email_alerts_enabled: checked })
       .eq("id", user.id);
+    if (error) {
+      // Rollback on failure
+      setNotifications((prev) => ({ ...prev, alertsEmail: !checked }));
+      toast({ title: "Error", description: "Failed to save preference. Please try again.", variant: "destructive" });
+    }
   };
 
   // Show loading while checking auth
@@ -334,8 +341,15 @@ function SettingsContent() {
                   </div>
                   <Badge variant="secondary">Active</Badge>
                 </div>
-                <Button variant="outline" size="sm">
-                  Sign out all other sessions
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await logout();
+                    router.push("/login");
+                  }}
+                >
+                  Sign out all sessions
                 </Button>
               </CardContent>
             </Card>
