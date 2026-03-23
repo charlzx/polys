@@ -6,6 +6,8 @@ const CLOB_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
 const POLL_INTERVAL_MS = 15_000;
 const SINGLE_POLL_INTERVAL_MS = 10_000;
 const WS_RECONNECT_DELAY_MS = 3_000;
+// If no book event is received within this window, start polling REST as a fallback
+const WS_HEALTH_TIMEOUT_MS = 15_000;
 
 interface MarketUpdate {
   marketId: string;
@@ -353,6 +355,7 @@ export function useSingleMarketWebSocket(
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<NodeJS.Timeout | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const wsHealthRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
   const latestOddsRef = useRef<number>(initialOdds ?? 50);
   const priceHistoryRef = useRef<number[]>([]);
@@ -398,6 +401,29 @@ export function useSingleMarketWebSocket(
         ws.onopen = () => {
           if (!mountedRef.current) { ws.close(); return; }
           ws.send(JSON.stringify({ auth: {}, type: "market", markets: [yesTokenId] }));
+          // Start health watchdog — if no book event arrives within the window, fall back to REST polling
+          wsHealthRef.current = setTimeout(() => {
+            if (!mountedRef.current) return;
+            if (lastUpdate === null) {
+              console.warn("[useSingleMarketWebSocket] No book event received; starting REST fallback poll");
+              if (mountedRef.current) setFeedError("No live data received — using REST fallback");
+              const fallbackPoll = async () => {
+                if (!mountedRef.current) return;
+                try {
+                  const res = await fetch(`${MARKETS_API}/${marketId}`);
+                  if (res.ok) {
+                    const data = await res.json() as { outcomePrices?: string };
+                    const odds = parsePriceAndOdds(data.outcomePrices);
+                    if (odds && mountedRef.current) processOddsUpdate(odds.yes);
+                  }
+                } catch (err) {
+                  console.warn("[useSingleMarketWebSocket] REST fallback error", err);
+                }
+              };
+              fallbackPoll();
+              pollRef.current = setInterval(fallbackPoll, SINGLE_POLL_INTERVAL_MS);
+            }
+          }, WS_HEALTH_TIMEOUT_MS);
         };
 
         ws.onmessage = (event: MessageEvent) => {
@@ -411,6 +437,11 @@ export function useSingleMarketWebSocket(
 
               if (msg.event_type === "book") {
                 const bookMsg = msg as ClobBookEvent;
+
+                // Clear the health watchdog — WS is delivering events
+                if (wsHealthRef.current) { clearTimeout(wsHealthRef.current); wsHealthRef.current = null; }
+                if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+                if (mountedRef.current) setFeedError(null);
 
                 // Update live order book
                 const rawBids = (bookMsg.bids ?? [])
@@ -520,6 +551,7 @@ export function useSingleMarketWebSocket(
 
     return () => {
       mountedRef.current = false;
+      if (wsHealthRef.current) clearTimeout(wsHealthRef.current);
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
       if (wsRef.current) {
         wsRef.current.onclose = null;
