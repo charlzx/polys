@@ -142,9 +142,8 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
   - Paginated grid (12 per page) with loading skeletons and empty/error states
   - "200 live" badge in header when loaded
 - **Navigation**:
-  - Desktop header (`components/AppHeader.tsx`): "Kalshi" tab added between Markets and Whales; uses `ChartBar` icon
-  - Mobile bottom nav (`components/MobileBottomNav.tsx`): "Kalshi" replaces "Arbitrage" (premium);
-    uses `ChartBar` icon; 6-item layout maintained
+  - Desktop header (`components/AppHeader.tsx`): "Kalshi" tab added between Markets and Whales; uses `ChartBar` icon; all 7 tabs: Dashboard, Markets, Kalshi, Whales, Arbitrage, Portfolio, Alerts
+  - Mobile bottom nav (`components/MobileBottomNav.tsx`): "Kalshi" replaces "Whales" (Whales still in desktop nav); 6-item layout: Dashboard, Markets, Kalshi, Arbitrage, Alerts, Portfolio
 
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
