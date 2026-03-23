@@ -29,12 +29,14 @@ interface GammaMarket {
   volume24hr?: number;
 }
 
-function safeNum(v: unknown): number {
-  const n = parseFloat(String(v));
-  return isNaN(n) ? 0 : n;
+// Verify the caller is the internal cron scheduler — rejects unauthorized requests.
+function isAuthorized(request: Request): boolean {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false;
+  const auth = request.headers.get("authorization");
+  return auth === `Bearer ${cronSecret}`;
 }
 
-// Fetch top markets from the internal proxy to avoid CORS issues server-side
 async function fetchTopMarkets(baseUrl: string): Promise<GammaMarket[]> {
   try {
     const res = await fetch(
@@ -49,7 +51,7 @@ async function fetchTopMarkets(baseUrl: string): Promise<GammaMarket[]> {
   }
 }
 
-// Send email via the send route
+// Call the send route with the CRON_SECRET (internal server-to-server)
 async function sendAlertEmail(
   baseUrl: string,
   to: string,
@@ -57,10 +59,14 @@ async function sendAlertEmail(
   currentValue: string,
   changeText: string
 ) {
+  const cronSecret = process.env.CRON_SECRET ?? "";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? baseUrl;
   await fetch(`${baseUrl}/api/alerts/send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cronSecret}`,
+    },
     body: JSON.stringify({
       to,
       alertName: alert.name,
@@ -74,7 +80,17 @@ async function sendAlertEmail(
   });
 }
 
+function safeNum(v: unknown): number {
+  const n = parseFloat(String(v));
+  return isNaN(n) ? 0 : n;
+}
+
 export async function GET(request: Request) {
+  // Only allow requests from the cron scheduler
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -85,12 +101,10 @@ export async function GET(request: Request) {
     );
   }
 
-  // Use service role key to bypass RLS for reading ALL active alerts
   const supabase = createClient(supabaseUrl, serviceRoleKey);
-
   const { origin } = new URL(request.url);
 
-  // 1. Load all active alerts
+  // Load all active alerts
   const { data: alertsData, error: alertsErr } = await supabase
     .from("alerts")
     .select("*")
@@ -105,10 +119,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ checked: 0, triggered: 0 });
   }
 
-  // 2. Fetch current market data
   const markets = await fetchTopMarkets(origin);
 
-  // Build market lookup maps
   const marketByName = new Map<string, GammaMarket>();
   const marketById = new Map<string, GammaMarket>();
   for (const m of markets) {
@@ -121,17 +133,17 @@ export async function GET(request: Request) {
   const now = Date.now();
 
   for (const alert of alerts) {
-    // Cooldown guard — don't re-trigger within cooldown window
+    // Cooldown guard — don't re-trigger within the cooldown window
     if (alert.last_triggered_at) {
       const lastMs = new Date(alert.last_triggered_at).getTime();
       if (now - lastMs < cutoffMs) continue;
     }
 
-    // Find the relevant market
     const market =
       (alert.market_id ? marketById.get(alert.market_id) : null) ??
       (alert.market_name
-        ? marketByName.get(alert.market_name.toLowerCase()) ?? findFuzzyMarket(markets, alert.market_name)
+        ? marketByName.get(alert.market_name.toLowerCase()) ??
+          findFuzzyMarket(markets, alert.market_name)
         : null);
 
     let shouldFire = false;
@@ -139,12 +151,9 @@ export async function GET(request: Request) {
     let changeText = "—";
 
     if (alert.alert_type === "odds" && market) {
-      // Parse YES price from outcomePrices JSON array
       const prices: number[] = JSON.parse(market.outcomePrices || "[0.5,0.5]");
       const yesPrice = safeNum(prices[0]) * 100;
       currentValue = `${yesPrice.toFixed(1)}%`;
-      // For simplicity: fire if YES price is below threshold (e.g., "notify if YES < 40%")
-      // In a full implementation, we'd store the comparison direction + previous value
       if (yesPrice < alert.threshold) {
         shouldFire = true;
         changeText = `${yesPrice.toFixed(1)}% (below ${alert.threshold}%)`;
@@ -152,13 +161,11 @@ export async function GET(request: Request) {
     } else if (alert.alert_type === "volume" && market) {
       const vol24h = safeNum(market.volume24hr ?? 0);
       currentValue = `$${(vol24h / 1000).toFixed(1)}k`;
-      // Fire if 24h volume threshold in thousands exceeded
       if (vol24h >= alert.threshold * 1000) {
         shouldFire = true;
         changeText = `$${(vol24h / 1000).toFixed(1)}k 24h volume`;
       }
     } else if (alert.alert_type === "new" && markets.length > 0) {
-      // "New market" alerts: if any market name contains the keyword (market_name as keyword)
       const keyword = (alert.market_name ?? "").toLowerCase();
       if (keyword) {
         const found = markets.find((m) => m.question.toLowerCase().includes(keyword));
@@ -171,19 +178,16 @@ export async function GET(request: Request) {
     }
 
     if (!shouldFire) continue;
-
     triggered++;
 
-    // 3. Get user email
+    // Get user email via admin API
     const { data: userData } = await supabase.auth.admin.getUserById(alert.user_id);
     const email = userData?.user?.email;
 
-    // 4. Send email if delivery_email is on and we have an address
     if (alert.delivery_email && email) {
       await sendAlertEmail(origin, email, alert, currentValue, changeText);
     }
 
-    // 5. Update alert: increment trigger count, record timestamp
     await supabase
       .from("alerts")
       .update({

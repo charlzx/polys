@@ -36,3 +36,8 @@ externalPort = 80
 [deployment]
 run = ["sh", "-c", "pnpm build"]
 deploymentTarget = "cloudrun"
+
+[userenv]
+
+[userenv.shared]
+CRON_SECRET = "62d198408728cb2df0b28ae9b42c9b2dd9f8538d979b61be3b2776e6d085c923"

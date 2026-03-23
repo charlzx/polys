@@ -61,15 +61,17 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - **Env secrets required**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 ## Email Alerts (Task #5 — COMPLETE)
-- **Email provider**: Resend (`https://api.resend.com/emails`) — no SDK, raw fetch with `RESEND_API_KEY`
-- **Send route**: `app/api/alerts/send/route.ts` — POST endpoint; accepts `AlertEmailPayload`; builds styled HTML email; returns `{ ok, emailId }`
-- **Check/eval engine**: `app/api/alerts/check/route.ts` — GET endpoint; uses Supabase service role to read ALL active alerts; fetches live market data from `/api/markets`; evaluates odds/volume/new-market conditions; fires email + updates `last_triggered_at` + `trigger_count`; 60-min cooldown guard per alert
-- **Alerts CRUD hook**: `hooks/useAlerts.ts` — browser Supabase client; `createAlert`, `toggleAlert`, `deleteAlert`; RLS ensures users only see their own rows
+- **Email provider**: Resend (`https://api.resend.com/emails`) — raw fetch with `RESEND_API_KEY`; no SDK dependency
+- **Send route**: `app/api/alerts/send/route.ts` — POST; requires `Authorization: Bearer $CRON_SECRET` (internal-only, prevents open relay abuse); builds styled HTML email; returns `{ ok, emailId }`
+- **Check/eval engine**: `app/api/alerts/check/route.ts` — GET; requires `Authorization: Bearer $CRON_SECRET`; reads ALL active alerts via Supabase service role; fetches live Polymarket data; evaluates odds/volume/new-market conditions; fires email + updates `last_triggered_at` + `trigger_count`; 60-min cooldown guard per alert
+- **Cron entry-point**: `app/api/cron/alerts/route.ts` — GET; requires same `Authorization: Bearer $CRON_SECRET`; orchestrates the check run; schedule this endpoint every 5 minutes via an external scheduler
+- **Cron setup**: Use cron-job.org or Upstash QStash to call `GET /api/cron/alerts` with header `Authorization: Bearer <CRON_SECRET>` every 5 minutes after deployment
+- **Alerts CRUD hook**: `hooks/useAlerts.ts` — stable `useMemo` Supabase client; `createAlert`, `toggleAlert`, `deleteAlert`; RLS ensures users see only their own rows
 - **Alerts page**: `app/alerts/page.tsx` — fully wired to Supabase; live CRUD; real-time stats (total / active / triggered-today); loading skeletons; graceful error handling
-- **Supabase migration**: `supabase/migrations/002_alerts.sql` — `public.alerts` table; RLS policies (user-scoped CRUD + service role override); indexes
-- **Resend domain note**: Without domain verification, Resend can only send to the account owner's email. To send to all users, verify a custom domain at resend.com/domains and update `from` in `app/api/alerts/send/route.ts`
-- **Sender**: `onboarding@resend.dev` (Resend test domain; works without custom domain setup)
-- **Env secrets required**: `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- **Supabase migration**: `supabase/migrations/002_alerts.sql` — `public.alerts` table; RLS policies (user-scoped CRUD + service role override); indexes — run in Supabase Dashboard SQL Editor
+- **Startup check**: `instrumentation.ts` + `lib/supabase/migrate.ts` — detects missing table at boot and logs the migration URL
+- **Sender**: `onboarding@resend.dev` — works without domain verification (Resend sends only to account owner's email until domain is verified at resend.com/domains; update `from` field in send route after verifying)
+- **Env secrets required**: `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`
 - **DB migration**: Run `supabase/migrations/002_alerts.sql` in Supabase Dashboard SQL Editor before using alerts
 
 ## Running the App

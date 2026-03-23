@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export interface UserAlert {
@@ -28,7 +28,9 @@ export interface CreateAlertInput {
 }
 
 export function useAlerts(userId: string | undefined) {
-  const supabase = createClient();
+  // Stable client instance — created once, never recreated on render
+  const supabase = useMemo(() => createClient(), []);
+
   const [alerts, setAlerts] = useState<UserAlert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

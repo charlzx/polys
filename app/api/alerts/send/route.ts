@@ -13,6 +13,15 @@ export interface AlertEmailPayload {
   marketUrl?: string;
 }
 
+// Internal-only: requires the CRON_SECRET to be present in Authorization header.
+// This prevents the route from being used as an open email relay by external callers.
+function isAuthorized(request: Request): boolean {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false;
+  const auth = request.headers.get("authorization");
+  return auth === `Bearer ${cronSecret}`;
+}
+
 function buildEmailHtml(p: AlertEmailPayload): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://polys.app";
   const marketUrl = p.marketUrl ?? `${appUrl}/markets`;
@@ -42,7 +51,6 @@ function buildEmailHtml(p: AlertEmailPayload): string {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
-        <!-- Header -->
         <tr>
           <td style="padding-bottom:24px;">
             <span style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">Polys</span>
@@ -50,17 +58,12 @@ function buildEmailHtml(p: AlertEmailPayload): string {
           </td>
         </tr>
 
-        <!-- Alert card -->
         <tr>
           <td style="background:#18181b;border-radius:12px;border:1px solid #27272a;overflow:hidden;">
-
-            <!-- Colored top bar -->
             <div style="height:4px;background:${color};"></div>
-
             <table width="100%" cellpadding="0" cellspacing="0" style="padding:28px 32px;">
               <tr>
                 <td>
-                  <!-- Badge + title -->
                   <div style="margin-bottom:20px;">
                     <span style="display:inline-block;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;background:${color}22;color:${color};border:1px solid ${color}44;">
                       ${typeLabel[p.alertType] ?? p.alertType}
@@ -69,13 +72,11 @@ function buildEmailHtml(p: AlertEmailPayload): string {
                     <p style="margin:0;font-size:14px;color:#9ca3af;">${p.marketName}</p>
                   </div>
 
-                  <!-- Condition -->
                   <div style="background:#0f0f13;border-radius:8px;padding:16px;margin-bottom:20px;">
                     <p style="margin:0 0 8px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Condition Met</p>
                     <p style="margin:0;font-size:15px;color:#e5e7eb;">${p.conditionText}</p>
                   </div>
 
-                  <!-- Stats row -->
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
                     <tr>
                       <td style="width:50%;padding-right:8px;">
@@ -93,7 +94,6 @@ function buildEmailHtml(p: AlertEmailPayload): string {
                     </tr>
                   </table>
 
-                  <!-- CTA -->
                   <a href="${marketUrl}" style="display:block;text-align:center;background:${color};color:#ffffff;font-size:15px;font-weight:600;padding:14px 24px;border-radius:8px;text-decoration:none;">
                     View Market
                   </a>
@@ -103,7 +103,6 @@ function buildEmailHtml(p: AlertEmailPayload): string {
           </td>
         </tr>
 
-        <!-- Footer -->
         <tr>
           <td style="padding-top:24px;text-align:center;">
             <p style="margin:0;font-size:12px;color:#4b5563;">
@@ -121,6 +120,11 @@ function buildEmailHtml(p: AlertEmailPayload): string {
 }
 
 export async function POST(request: Request) {
+  // Require internal CRON_SECRET — prevents open relay abuse
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "RESEND_API_KEY not configured" }, { status: 503 });
