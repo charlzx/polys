@@ -14,6 +14,7 @@ create table if not exists public.alerts (
   status           text not null default 'active' check (status in ('active', 'paused', 'triggered')),
   last_triggered_at timestamptz,
   trigger_count    integer not null default 0,
+  seen_market_ids  text[] not null default '{}',
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
@@ -61,3 +62,13 @@ create trigger alerts_updated_at
 create index if not exists alerts_user_id_idx on public.alerts (user_id);
 -- Index for check engine: active alerts only
 create index if not exists alerts_status_idx on public.alerts (status) where status = 'active';
+
+-- Add seen_market_ids column if the table already existed before this migration
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'alerts' and column_name = 'seen_market_ids'
+  ) then
+    alter table public.alerts add column seen_market_ids text[] not null default '{}';
+  end if;
+end $$;

@@ -319,7 +319,13 @@ export default function AlertsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
                 >
-                  <Card className={alert.status !== "active" ? "opacity-60" : ""}>
+                  <Card className={
+                    alert.status === "triggered"
+                      ? "border-green-500/40"
+                      : alert.status === "paused"
+                      ? "opacity-60"
+                      : ""
+                  }>
                     <CardContent className="p-3 md:p-4">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                         {/* Alert Info */}
@@ -357,21 +363,32 @@ export default function AlertsPage() {
                             </Badge>
                           )}
                           {alert.status === "triggered" && (
-                            <CheckCircle
-                              weight="fill"
-                              className="h-4 w-4 text-green-500"
-                              title="Alert triggered"
-                            />
+                            <Badge className="text-caption bg-green-500/10 text-green-500 border-green-500/30">
+                              <CheckCircle weight="fill" className="h-3 w-3 mr-1" />
+                              Fired
+                            </Badge>
                           )}
                         </div>
 
                         {/* Actions */}
                         <div className="flex items-center gap-2 shrink-0">
-                          <Switch
-                            checked={alert.status === "active"}
-                            onCheckedChange={() => toggleAlert(alert.id, alert.status)}
-                            title={alert.status === "active" ? "Pause alert" : "Activate alert"}
-                          />
+                          {alert.status === "triggered" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-caption"
+                              onClick={() => toggleAlert(alert.id, alert.status)}
+                              title="Re-arm this alert to watch for new triggers"
+                            >
+                              Re-arm
+                            </Button>
+                          ) : (
+                            <Switch
+                              checked={alert.status === "active"}
+                              onCheckedChange={() => toggleAlert(alert.id, alert.status)}
+                              title={alert.status === "active" ? "Pause alert" : "Activate alert"}
+                            />
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"

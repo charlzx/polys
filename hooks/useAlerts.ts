@@ -16,6 +16,7 @@ export interface UserAlert {
   status: "active" | "paused" | "triggered";
   last_triggered_at: string | null;
   trigger_count: number;
+  seen_market_ids: string[];
   created_at: string;
 }
 
@@ -74,6 +75,7 @@ export function useAlerts(userId: string | undefined) {
         threshold: input.threshold,
         delivery_email: input.delivery_email,
         status: "active",
+        seen_market_ids: [],
       });
 
       if (err) return err.message;
@@ -83,13 +85,29 @@ export function useAlerts(userId: string | undefined) {
     [supabase, userId, loadAlerts]
   );
 
+  // Cycles: active → paused → active; triggered → active (re-arm)
   const toggleAlert = useCallback(
     async (id: string, currentStatus: string): Promise<void> => {
-      const newStatus = currentStatus === "active" ? "paused" : "active";
-      await supabase.from("alerts").update({ status: newStatus }).eq("id", id);
+      let newStatus: UserAlert["status"];
+      if (currentStatus === "active") {
+        newStatus = "paused";
+      } else {
+        // paused or triggered both go back to active (re-arm)
+        newStatus = "active";
+      }
+
+      const updatePayload: Record<string, unknown> = { status: newStatus };
+      // When re-arming a triggered alert, clear seen_market_ids so new markets can fire again
+      if (currentStatus === "triggered") {
+        updatePayload.seen_market_ids = [];
+      }
+
+      await supabase.from("alerts").update(updatePayload).eq("id", id);
       setAlerts((prev) =>
         prev.map((a) =>
-          a.id === id ? { ...a, status: newStatus as UserAlert["status"] } : a
+          a.id === id
+            ? { ...a, status: newStatus, seen_market_ids: currentStatus === "triggered" ? [] : a.seen_market_ids }
+            : a
         )
       );
     },
