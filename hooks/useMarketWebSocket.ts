@@ -55,15 +55,19 @@ interface ClobBookEvent {
 }
 
 interface ClobPriceChange {
+  asset_id?: string;
   price: string;
   side: string;
   size: string;
+  best_bid?: string;
+  best_ask?: string;
 }
 
 interface ClobPriceChangeEvent {
   event_type: "price_change";
-  asset_id: string;
-  changes: ClobPriceChange[];
+  asset_id?: string;
+  changes?: ClobPriceChange[];
+  price_changes?: ClobPriceChange[];
 }
 
 type ClobEvent = ClobBookEvent | ClobPriceChangeEvent | { event_type: string; asset_id?: string };
@@ -180,7 +184,7 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
           ws.close();
           return;
         }
-        ws.send(JSON.stringify({ auth: {}, type: "market", markets: tokenIds }));
+        ws.send(JSON.stringify({ assets_ids: tokenIds, type: "market" }));
         if (mountedRef.current) setIsConnected(true);
       };
 
@@ -400,7 +404,7 @@ export function useSingleMarketWebSocket(
 
         ws.onopen = () => {
           if (!mountedRef.current) { ws.close(); return; }
-          ws.send(JSON.stringify({ auth: {}, type: "market", markets: [yesTokenId] }));
+          ws.send(JSON.stringify({ assets_ids: [yesTokenId], type: "market" }));
           // Start health watchdog — if no book event arrives within the window, fall back to REST polling
           wsHealthRef.current = setTimeout(() => {
             if (!mountedRef.current) return;
@@ -477,9 +481,14 @@ export function useSingleMarketWebSocket(
                 }
               } else if (msg.event_type === "price_change") {
                 const pcMsg = msg as ClobPriceChangeEvent;
-                // Treat significant non-zero changes as trade signals
-                if (pcMsg.changes && mountedRef.current) {
-                  const trades: LiveTrade[] = pcMsg.changes
+                // Support both the old `changes` field and the Sept-2025 `price_changes` array
+                const rawChanges = pcMsg.price_changes ?? pcMsg.changes ?? [];
+                // Filter to only the yesToken's entries (per-item asset_id or top-level)
+                const relevant = rawChanges.filter((c) =>
+                  (c.asset_id ?? pcMsg.asset_id) === yesTokenId
+                );
+                if (relevant.length > 0 && mountedRef.current) {
+                  const trades: LiveTrade[] = relevant
                     .filter((c) => parseFloat(c.size) > 0)
                     .map((c) => ({
                       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
