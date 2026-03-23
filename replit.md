@@ -39,6 +39,15 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - Category detection uses event tickers (e.g., `cbb-`, `nba-`) + keyword matching with word boundaries
 - `TransformedMarket` extended with `yesTokenId`, `noTokenId`, `conditionId`
 
+## Arbitrage Engine (Task #3 — COMPLETE)
+- **Kalshi client**: `services/kalshi.ts` — typed client for Kalshi Trade API v2 events endpoint; server-side `fetchKalshiEventsServer()` fetches up to 300 events with nested markets
+- **Arbitrage service**: `services/arbitrage.ts` — keyword-based market matching (Jaccard similarity >= 0.18) + binary arbitrage profit math; caps spread at 15pp to filter false matches
+- **Arbitrage API**: `app/api/arbitrage/route.ts` — unified server route; fetches Polymarket + Kalshi in parallel, runs detection, returns `{ opportunities, stats }`; 30-second cache
+- **Hook**: `hooks/useArbitrage.ts` — React Query; polls `/api/arbitrage` every 30 seconds
+- **Page**: `app/arbitrage/page.tsx` — wired to live data; loading skeletons, empty state, filter by min-profit + platform; premium gate controlled by `user.tier` from `useAuth`
+- **Arbitrage math**: cost = `1 - |p_poly - p_kalshi|`; profit% = `|spread| / cost × 100`; only valid when 3% ≤ spread ≤ 15%
+- **data/arbitrage.ts**: stripped mock data; re-exports types from `services/arbitrage`
+
 ## Authentication (Task #2 — COMPLETE)
 - **Provider**: Supabase (`@supabase/supabase-js` + `@supabase/ssr`)
 - **Client**: `lib/supabase/client.ts` — browser-side `createBrowserClient`
