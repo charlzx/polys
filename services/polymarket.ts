@@ -299,7 +299,7 @@ export async function searchMarkets(query: string): Promise<TransformedMarket[]>
 export async function fetchPriceHistory(
   tokenId: string,
   timeframe: string = "30D"
-): Promise<Array<{ date: string; yes: number; no: number; high: number; low: number; volume: number }>> {
+): Promise<Array<{ date: string; yes: number; no: number }>> {
   const intervalMap: Record<string, { interval: string; fidelity: number }> = {
     "24H": { interval: "1d", fidelity: 60 },
     "7D":  { interval: "1w", fidelity: 60 },
@@ -323,15 +323,9 @@ export async function fetchPriceHistory(
     const history: Array<{ t: number; p: number }> = data.history ?? [];
     if (history.length === 0) return [];
 
-    return history.map((point, i) => {
+    return history.map((point) => {
       const yes = Math.round(point.p * 1000) / 10;
       const no = Math.round((1 - point.p) * 1000) / 10;
-      const prev = history[i - 1]?.p ?? point.p;
-      const next = history[i + 1]?.p ?? point.p;
-      const range = Math.abs(point.p - prev) + Math.abs(point.p - next);
-      const high = Math.min(99, Math.round((point.p + range / 2) * 1000) / 10);
-      const low = Math.max(1, Math.round((point.p - range / 2) * 1000) / 10);
-
       return {
         date: new Date(point.t * 1000).toLocaleDateString("en-US", {
           month: "short",
@@ -339,9 +333,6 @@ export async function fetchPriceHistory(
         }),
         yes,
         no,
-        high,
-        low,
-        volume: 0,
       };
     });
   } catch {

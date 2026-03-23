@@ -35,9 +35,6 @@ import {
   ResponsiveContainer,
   Area,
   AreaChart,
-  BarChart,
-  Bar,
-  Cell,
 } from "recharts";
 
 // Volatility indicator component
@@ -444,19 +441,6 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                             fill="url(#yesGradient)"
                           />
                         </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="h-16 mt-2">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                          <XAxis dataKey="date" hide />
-                          <YAxis hide />
-                          <Bar dataKey="volume" radius={[2, 2, 0, 0]}>
-                            {chartData.map((_entry, index) => (
-                              <Cell key={`cell-${index}`} fill="oklch(50% 0 0)" opacity={0.3} />
-                            ))}
-                          </Bar>
-                        </BarChart>
                       </ResponsiveContainer>
                     </div>
                   </>
