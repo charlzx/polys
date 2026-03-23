@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 const MARKETS_API = "/api/markets";
 const PRICE_HISTORY_API = "/api/price-history";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface TransformedMarket {
   id: string;
@@ -52,7 +51,6 @@ interface GammaMarket {
   events?: Array<{ title?: string; slug?: string; ticker?: string; category?: string }>;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDollar(raw: string | number | undefined | null): string {
   if (raw === undefined || raw === null || raw === "") return "$0";
@@ -230,7 +228,6 @@ function transformMarket(raw: GammaMarket): TransformedMarket {
   };
 }
 
-// ─── API Fetchers ─────────────────────────────────────────────────────────────
 
 export async function fetchMarkets(params?: {
   limit?: number;
@@ -295,10 +292,8 @@ export async function searchMarkets(query: string): Promise<TransformedMarket[]>
   }
 }
 
-// Fetch real price history from the CLOB API (via server proxy).
-// CLOB endpoint: GET /prices-history?market=<yesTokenId>&interval=<period>&fidelity=<minutes>
-// The `market` parameter takes the CLOB asset/token ID (not the Gamma market ID or conditionId).
-// Confirmed: returns { history: [{t: unixTimestamp, p: probability}] } for all market types.
+// Fetch price history from the CLOB API (via server proxy).
+// Calls /prices-history?market=<yesTokenId> — takes the CLOB token ID, not the Gamma market ID.
 export async function fetchPriceHistory(
   tokenId: string,
   timeframe: string = "30D"
@@ -343,7 +338,6 @@ export async function fetchPriceHistory(
   }
 }
 
-// ─── React Query Hooks ────────────────────────────────────────────────────────
 
 export function useMarkets(params?: {
   limit?: number;
@@ -392,7 +386,6 @@ export function usePriceHistory(
   });
 }
 
-// ─── Order Book ───────────────────────────────────────────────────────────────
 
 export interface OrderBookLevel {
   price: number;
@@ -459,7 +452,6 @@ export function useOrderbook(tokenId: string | undefined) {
   });
 }
 
-// ─── Categories ───────────────────────────────────────────────────────────────
 
 export const MARKET_CATEGORIES = [
   "All",

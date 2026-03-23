@@ -36,7 +36,6 @@ interface GammaMarketSlim {
   oneDayPriceChange?: number | string;
 }
 
-// ─── CLOB WebSocket message types ─────────────────────────────────────────────
 
 interface ClobBookLevel {
   price: string;
@@ -67,7 +66,6 @@ interface ClobPriceChangeEvent {
 
 type ClobEvent = ClobBookEvent | ClobPriceChangeEvent | { event_type: string; asset_id?: string };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parsePriceAndOdds(outcomePrices: string | undefined): { yes: number; no: number } | null {
   try {
@@ -94,7 +92,6 @@ function midPriceFromBook(bids: ClobBookLevel[], asks: ClobBookLevel[]): number 
   return (bestBid + bestAsk) / 2;
 }
 
-// ─── Multi-market hook ─────────────────────────────────────────────────────────
 
 export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
   const { marketIds = [], tokenPairs = [], enabled = true } = options;
@@ -106,7 +103,7 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
 
-  // ── Polling fallback (when no token pairs) ───────────────────────────────────
+
   const pollMarkets = useCallback(async (ids: string[]) => {
     if (!ids.length || !mountedRef.current) return;
     try {
@@ -165,7 +162,7 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
     }
   }, []);
 
-  // ── CLOB WebSocket (when token pairs are available) ──────────────────────────
+
   const connectWebSocket = useCallback(
     (pairs: TokenPair[]) => {
       if (!pairs.length || !mountedRef.current) return;
@@ -251,7 +248,7 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
     [] // connectWebSocket is stable — all state is via refs/setters
   );
 
-  // ── Main effect ──────────────────────────────────────────────────────────────
+
   useEffect(() => {
     mountedRef.current = true;
 
@@ -328,7 +325,6 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
   };
 }
 
-// ─── Single-market hook ────────────────────────────────────────────────────────
 
 export interface LiveTrade {
   id: string;
@@ -352,6 +348,7 @@ export function useSingleMarketWebSocket(
   const [recentChanges, setRecentChanges] = useState<number[]>([]);
   const [liveTrades, setLiveTrades] = useState<LiveTrade[]>([]);
   const [liveOrderBook, setLiveOrderBook] = useState<OrderBook | null>(null);
+  const [feedError, setFeedError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<NodeJS.Timeout | null>(null);
@@ -386,7 +383,7 @@ export function useSingleMarketWebSocket(
     setRecentChanges([...history]);
   }, []);
 
-  // ── CLOB WebSocket for single-market live data ───────────────────────────────
+
   useEffect(() => {
     mountedRef.current = true;
     if (!marketId) return;
@@ -471,27 +468,43 @@ export function useSingleMarketWebSocket(
           }
         };
 
-        ws.onerror = () => { /* silent */ };
+        ws.onerror = (ev) => {
+          if (mountedRef.current) setFeedError("WebSocket error — reconnecting");
+          console.warn("[useSingleMarketWebSocket] WS error", ev);
+        };
 
         ws.onclose = () => {
           if (!mountedRef.current) return;
-          reconnectRef.current = setTimeout(connect, WS_RECONNECT_DELAY_MS);
+          setFeedError("Feed disconnected — reconnecting");
+          reconnectRef.current = setTimeout(() => {
+            if (mountedRef.current) {
+              setFeedError(null);
+              connect();
+            }
+          }, WS_RECONNECT_DELAY_MS);
         };
       };
 
       connect();
     } else {
-      // Fall back to Gamma API polling if no token ID available
+      // Fall back to Gamma API polling when no CLOB token ID is available
       const poll = async () => {
         if (!mountedRef.current) return;
         try {
           const res = await fetch(`${MARKETS_API}/${marketId}`);
-          if (!res.ok) return;
+          if (!res.ok) {
+            if (mountedRef.current) setFeedError(`Fetch failed (${res.status})`);
+            return;
+          }
           const data = await res.json();
           const odds = parsePriceAndOdds(data.outcomePrices);
-          if (odds && mountedRef.current) processOddsUpdate(odds.yes);
-        } catch {
-          // ignore network errors
+          if (odds && mountedRef.current) {
+            setFeedError(null);
+            processOddsUpdate(odds.yes);
+          }
+        } catch (err) {
+          if (mountedRef.current) setFeedError("Network error — retrying");
+          console.warn("[useSingleMarketWebSocket] poll error", err);
         }
       };
 
@@ -517,5 +530,5 @@ export function useSingleMarketWebSocket(
     };
   }, [marketId, yesTokenId]);
 
-  return { currentOdds, lastUpdate, volatility, momentum, recentChanges, liveTrades, liveOrderBook };
+  return { currentOdds, lastUpdate, volatility, momentum, recentChanges, liveTrades, liveOrderBook, feedError };
 }

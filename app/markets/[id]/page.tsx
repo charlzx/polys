@@ -176,7 +176,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
 
   // Live WebSocket data (real CLOB connection when yesTokenId available)
-  const { currentOdds, lastUpdate, volatility, momentum, liveOrderBook, liveTrades } = useSingleMarketWebSocket(
+  const { currentOdds, lastUpdate, volatility, momentum, liveOrderBook, liveTrades, feedError } = useSingleMarketWebSocket(
     id,
     market?.yesOdds,
     market?.yesTokenId
@@ -280,8 +280,8 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                 <span className="w-1.5 h-1.5 rounded-full bg-success mr-1.5" />
                 Active
               </Badge>
-              {isLiveDataStale ? (
-                <Badge variant="secondary" className="text-caption gap-1 text-warning">
+              {feedError || isLiveDataStale ? (
+                <Badge variant="secondary" className="text-caption gap-1 text-warning" title={feedError ?? "Live feed stale"}>
                   <Broadcast className="h-2.5 w-2.5 text-warning" />
                   Reconnecting
                 </Badge>
