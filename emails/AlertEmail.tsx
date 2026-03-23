@@ -23,6 +23,7 @@ export interface AlertEmailProps {
   changeText: string;
   marketUrl: string;
   appUrl?: string;
+  triggeredAt?: string;
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -48,9 +49,21 @@ export function AlertEmail({
   changeText,
   marketUrl,
   appUrl = "https://polys.app",
+  triggeredAt,
 }: AlertEmailProps) {
   const color = TYPE_COLOR[alertType] ?? "#6366f1";
   const label = TYPE_LABEL[alertType] ?? alertType;
+  const timeLabel = triggeredAt
+    ? new Date(triggeredAt).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "UTC",
+        timeZoneName: "short",
+      })
+    : new Date().toUTCString();
 
   return (
     <Html lang="en">
@@ -72,17 +85,24 @@ export function AlertEmail({
             <Section style={{ ...stripe, backgroundColor: color }} />
 
             <Section style={cardBody}>
-              {/* Badge */}
-              <Text
-                style={{
-                  ...badge,
-                  color,
-                  backgroundColor: `${color}22`,
-                  borderColor: `${color}44`,
-                }}
-              >
-                {label}
-              </Text>
+              {/* Badge + Timestamp row */}
+              <Row>
+                <Column>
+                  <Text
+                    style={{
+                      ...badge,
+                      color,
+                      backgroundColor: `${color}22`,
+                      borderColor: `${color}44`,
+                    }}
+                  >
+                    {label}
+                  </Text>
+                </Column>
+                <Column style={{ textAlign: "right" }}>
+                  <Text style={timestampText}>{timeLabel}</Text>
+                </Column>
+              </Row>
 
               {/* Title */}
               <Heading style={alertTitle}>{alertName}</Heading>
@@ -180,6 +200,13 @@ const stripe: React.CSSProperties = {
 
 const cardBody: React.CSSProperties = {
   padding: "28px 32px",
+};
+
+const timestampText: React.CSSProperties = {
+  fontSize: "11px",
+  color: "#6b7280",
+  margin: "0",
+  paddingTop: "6px",
 };
 
 const badge: React.CSSProperties = {

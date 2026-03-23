@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       changeText: payload.changeText,
       marketUrl,
       appUrl,
+      triggeredAt: new Date().toISOString(),
     })
   );
 
