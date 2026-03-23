@@ -14,6 +14,8 @@ import type { TransformedMarket } from "@/services/polymarket";
 import { features } from "@/data/features";
 import { categories } from "@/data/categories";
 import { LiveFeed } from "@/components/LiveFeed";
+import { MarketPulseGrid, SparklineStrip } from "@/components/MarketPulseGrid";
+import { CategoryTabs } from "@/components/CategoryTabs";
 import {
   MagnifyingGlass,
   TrendUpIcon,
@@ -76,7 +78,7 @@ function PredictionsTicker({ markets }: { markets: TransformedMarket[] }) {
   );
 }
 
-// Featured market component with animation
+// Featured market component with animation and inner-glow hover effect
 function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; isLive?: boolean; index: number }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-50px" });
@@ -90,7 +92,7 @@ function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; 
     >
       <Link
         href={`/markets/${market.id}`}
-        className="block rounded-xl bg-card border border-border hover:border-primary/40 hover:shadow-lg transition-all group overflow-hidden"
+        className="block rounded-xl bg-card border border-border hover:border-primary/40 hover:shadow-[0_0_20px_rgba(var(--primary-rgb,99,102,241),0.15)] transition-all group overflow-hidden min-h-[44px]"
       >
         {/* Event image */}
         <div className="relative w-full h-28 bg-secondary/50">
@@ -160,7 +162,7 @@ function MarketRow({ market, rank }: { market: TransformedMarket; rank: number }
   return (
     <Link
       href={`/markets/${market.id}`}
-      className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors group"
+      className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors group min-h-[44px]"
     >
       <span className="text-caption text-muted-foreground w-5 text-center font-mono shrink-0">
         {rank}
@@ -235,7 +237,7 @@ function StatsTicker() {
   );
 }
 
-// Stacking Feature Card Component with improved animation
+// Stacking Feature Card Component with improved animation (mobile)
 function StackingFeatureCard({ feature, index }: { feature: typeof features[0]; index: number }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
@@ -243,48 +245,32 @@ function StackingFeatureCard({ feature, index }: { feature: typeof features[0]; 
     offset: ["start end", "start center"],
   });
 
-  // Scale transforms for stacking effect
-  const scale = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [0.85, 1]
-  );
-  
-  const opacity = useTransform(
-    scrollYProgress,
-    [0, 0.5, 1],
-    [0.3, 0.8, 1]
-  );
-
-  const y = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [60, 0]
-  );
-
-  // Calculate sticky offset for stacking
+  const scale = useTransform(scrollYProgress, [0, 1], [0.85, 1]);
+  const opacity = useTransform(scrollYProgress, [0, 0.5, 1], [0.3, 0.8, 1]);
+  const y = useTransform(scrollYProgress, [0, 1], [60, 0]);
   const stickyTop = 100 + index * 20;
 
   return (
     <motion.div
       ref={cardRef}
-      style={{ 
-        scale, 
+      style={{
+        scale,
         opacity,
         y,
         position: "sticky",
         top: stickyTop,
         zIndex: index,
       }}
-      className="p-6 rounded-2xl bg-card border border-border shadow-lg"
+      className="p-5 rounded-2xl bg-card border border-border shadow-lg"
     >
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
           <feature.icon weight="duotone" className="h-6 w-6 text-primary" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h3 className="text-subtitle font-semibold mb-2">{feature.title}</h3>
           <p className="text-small text-muted-foreground">{feature.description}</p>
+          {feature.preview && <div>{feature.preview}</div>}
         </div>
       </div>
     </motion.div>
@@ -296,14 +282,11 @@ export default function LandingPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Hero animation ref
   const heroRef = useRef<HTMLDivElement>(null);
   const heroInView = useInView(heroRef, { once: true });
 
-  // Fetch market data
   const { data: markets, isLoading } = useMarkets({ limit: 20, active: true });
 
-  // Build token pairs for real CLOB WebSocket updates
   const tokenPairs = useMemo(
     () =>
       (markets ?? [])
@@ -312,20 +295,17 @@ export default function LandingPage() {
     [markets]
   );
 
-  // Real-time updates via CLOB WebSocket when token pairs are available
   const { isConnected, applyUpdatesToMarkets } = useMarketWebSocket({
     tokenPairs,
     marketIds: markets?.map((m) => m.id) ?? [],
     enabled: (markets?.length ?? 0) > 0,
   });
 
-  // Apply live updates
   const liveMarkets = useMemo(() => {
     if (!markets) return [];
     return applyUpdatesToMarkets(markets);
   }, [markets, applyUpdatesToMarkets]);
 
-  // Filter markets
   const filteredMarkets = useMemo(() => {
     let result = liveMarkets;
 
@@ -345,7 +325,6 @@ export default function LandingPage() {
     return result;
   }, [liveMarkets, selectedCategory, searchQuery]);
 
-  // Top trending (first 4)
   const featuredMarkets = filteredMarkets.slice(0, 4);
   const remainingMarkets = filteredMarkets.slice(4, 12);
 
@@ -355,89 +334,113 @@ export default function LandingPage() {
       <MobileNav isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
       {/* Header */}
-      <PublicHeader 
-        searchQuery={searchQuery} 
+      <PublicHeader
+        searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onMobileNavOpen={() => setMobileNavOpen(true)}
       />
 
-      {/* Live markets ticker — top 10 by volume */}
+      {/* Live markets ticker */}
       <PredictionsTicker markets={liveMarkets} />
 
-      {/* Hero Section */}
+      {/* Hero Section — split layout */}
       <section
         ref={heroRef}
         className="border-b border-border bg-gradient-to-b from-secondary/30 to-background"
       >
-        <div className="container py-12 md:py-20">
-          <div className="max-w-3xl">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="flex items-center gap-2 mb-4"
-            >
-              <Badge variant="secondary" className="font-medium">
-                <Pulse weight="fill" className="h-3 w-3 mr-1" />
-                Real-time Analytics
-              </Badge>
-              {isConnected && (
-                <Badge variant="outline" className="text-success border-success/30">
-                  <Broadcast weight="fill" className="h-2.5 w-2.5 mr-1 animate-pulse" />
-                  Connected
+        <div className="container py-10 md:py-16">
+          <div className="lg:grid lg:grid-cols-2 lg:gap-12 lg:items-center">
+            {/* Left column */}
+            <div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="flex items-center gap-2 mb-4"
+              >
+                <Badge variant="secondary" className="font-medium">
+                  <Pulse weight="fill" className="h-3 w-3 mr-1" />
+                  Real-time Analytics
                 </Badge>
-              )}
-            </motion.div>
-            
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="text-[2.25rem] md:text-[3.5rem] font-bold leading-[1.1] tracking-tight mb-4"
-            >
-              Prediction Market
-              <br />
-              <span className="text-muted-foreground">Intelligence</span>
-            </motion.h1>
-            
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="text-body md:text-subtitle text-muted-foreground mb-8 max-w-xl"
-            >
-              Track odds, detect arbitrage opportunities, and analyze market sentiment across Polymarket, Kalshi, and more. All in real-time.
-            </motion.p>
-            
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="flex flex-col sm:flex-row items-start sm:items-center gap-4"
-            >
-              <Button size="lg" asChild>
-                <Link href="/auth?mode=signup">
-                  Start for free
-                  <ArrowRight weight="bold" className="h-4 w-4 ml-2" />
-                </Link>
-              </Button>
-              <Button variant="outline" size="lg" asChild>
-                <Link href="/dashboard">View dashboard</Link>
-              </Button>
-            </motion.div>
+                {isConnected && (
+                  <Badge variant="outline" className="text-success border-success/30">
+                    <Broadcast weight="fill" className="h-2.5 w-2.5 mr-1 animate-pulse" />
+                    Connected
+                  </Badge>
+                )}
+              </motion.div>
 
-            {/* Happening Now strip */}
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
+                style={{ fontSize: "clamp(2rem, 6vw, 3.5rem)" }}
+                className="font-bold leading-[1.1] tracking-tight mb-4"
+              >
+                Prediction Market
+                <br />
+                <span className="text-muted-foreground">Intelligence</span>
+              </motion.h1>
+
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="text-body md:text-subtitle text-muted-foreground mb-8 max-w-xl"
+              >
+                Track odds, detect arbitrage opportunities, and analyze market sentiment across Polymarket, Kalshi, and more. All in real-time.
+              </motion.p>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6"
+              >
+                <Button size="lg" asChild className="w-full sm:w-auto">
+                  <Link href="/auth?mode=signup">
+                    Start for free
+                    <ArrowRight weight="bold" className="h-4 w-4 ml-2" />
+                  </Link>
+                </Button>
+                <Button variant="outline" size="lg" asChild className="w-full sm:w-auto">
+                  <Link href="/dashboard">View dashboard</Link>
+                </Button>
+              </motion.div>
+
+              {/* Mobile sparkline strip — below CTAs, above md */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, delay: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="md:hidden mb-6"
+              >
+                <SparklineStrip markets={liveMarkets} />
+              </motion.div>
+
+              {/* Happening Now strip */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, delay: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="p-4 rounded-xl border border-border bg-card/60 backdrop-blur-sm max-w-md"
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Lightning weight="fill" className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-caption font-semibold text-muted-foreground uppercase tracking-wide">Happening Now</span>
+                </div>
+                <LiveFeed limit={3} showHeader={false} compact={true} />
+              </motion.div>
+            </div>
+
+            {/* Right column — Market Pulse Grid (desktop only) */}
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="mt-8 p-4 rounded-xl border border-border bg-card/60 backdrop-blur-sm max-w-md"
+              initial={{ opacity: 0, x: 20 }}
+              animate={heroInView ? { opacity: 1, x: 0 } : {}}
+              transition={{ duration: 0.7, delay: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="hidden lg:block"
             >
-              <div className="flex items-center gap-2 mb-3">
-                <Lightning weight="fill" className="h-3.5 w-3.5 text-primary" />
-                <span className="text-caption font-semibold text-muted-foreground uppercase tracking-wide">Happening Now</span>
-              </div>
-              <LiveFeed limit={3} showHeader={false} compact={true} />
+              <MarketPulseGrid markets={liveMarkets} />
             </motion.div>
           </div>
 
@@ -470,8 +473,8 @@ export default function LandingPage() {
               Professional-grade tools for prediction market analysis, all in one platform.
             </p>
           </motion.div>
-          
-          {/* Stacking cards on mobile, grid on desktop */}
+
+          {/* Grid on desktop */}
           <div className="hidden md:grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => (
               <motion.div
@@ -480,19 +483,20 @@ export default function LandingPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="p-6 rounded-2xl bg-card border border-border hover:border-primary/30 hover:shadow-lg transition-all"
+                className="p-6 rounded-2xl bg-card border border-border hover:border-primary/30 hover:shadow-[0_0_20px_rgba(var(--primary-rgb,99,102,241),0.12)] transition-all flex flex-col"
               >
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <feature.icon weight="duotone" className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="text-subtitle font-semibold mb-2">{feature.title}</h3>
                 <p className="text-small text-muted-foreground">{feature.description}</p>
+                {feature.preview && <div className="mt-auto">{feature.preview}</div>}
               </motion.div>
             ))}
           </div>
-          
+
           {/* Stacking cards on mobile */}
-          <div className="md:hidden relative" style={{ minHeight: `${features.length * 200}px` }}>
+          <div className="md:hidden relative" style={{ minHeight: `${features.length * 220}px` }}>
             {features.map((feature, index) => (
               <StackingFeatureCard
                 key={feature.title}
@@ -512,50 +516,30 @@ export default function LandingPage() {
             placeholder="Search markets..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 bg-secondary/50 border-transparent focus:border-border"
+            className="pl-9 w-full bg-secondary/50 border-transparent focus:border-border"
           />
         </div>
       </div>
 
-      {/* Category tabs */}
+      {/* Category tabs — animated pill strip */}
       <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-16 z-40">
         <div className="container">
-          <div className="flex items-center gap-1 py-2 overflow-x-auto scrollbar-hide">
-            {categories.map((cat) => (
-              <Button
-                key={cat}
-                variant={selectedCategory === cat ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setSelectedCategory(cat)}
-                className="shrink-0"
-              >
-                {cat === "Trending" && <Lightning weight="fill" className="h-3.5 w-3.5 mr-1" />}
-                {cat}
-              </Button>
-            ))}
-          </div>
+          <CategoryTabs selected={selectedCategory} onChange={setSelectedCategory} />
         </div>
       </div>
 
       {/* Main content */}
       <main className="container py-6 flex-1">
         {isLoading ? (
-          // Loading skeleton
           <div className="space-y-6">
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[...Array(4)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-32 rounded-xl bg-secondary/50 animate-pulse"
-                />
+                <div key={i} className="h-32 rounded-xl bg-secondary/50 animate-pulse" />
               ))}
             </div>
             <div className="space-y-2">
               {[...Array(8)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-14 rounded-lg bg-secondary/50 animate-pulse"
-                />
+                <div key={i} className="h-14 rounded-lg bg-secondary/50 animate-pulse" />
               ))}
             </div>
           </div>
