@@ -25,6 +25,7 @@ import {
   ArrowUpRight,
   CaretLeft,
   CaretRight,
+  Broadcast,
 } from "@phosphor-icons/react";
 import { useMarkets, MARKET_CATEGORIES, type MarketCategory, type TransformedMarket } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
@@ -182,7 +183,7 @@ export default function MarketsPage() {
     [markets]
   );
 
-  const { applyUpdatesToMarkets } = useMarketWebSocket({
+  const { isConnected, applyUpdatesToMarkets } = useMarketWebSocket({
     tokenPairs,
     marketIds: markets?.map((m) => m.id) ?? [],
     enabled: (markets?.length ?? 0) > 0,
@@ -228,7 +229,7 @@ export default function MarketsPage() {
     }
 
     return result;
-  }, [markets, searchQuery, selectedCategory, sortBy]);
+  }, [liveMarkets, searchQuery, selectedCategory, sortBy]);
 
   // Pagination
   const totalPages = Math.ceil(filteredMarkets.length / ITEMS_PER_PAGE);
@@ -301,7 +302,15 @@ export default function MarketsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <h1 className="text-title md:text-display">Markets</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-title md:text-display">Markets</h1>
+              {markets && (
+                <Badge variant="secondary" className={`text-caption gap-1 ${isConnected ? "" : "text-warning"}`}>
+                  <Broadcast className={`h-2.5 w-2.5 ${isConnected ? "text-success animate-pulse" : "text-warning"}`} />
+                  {isConnected ? "Live" : "Reconnecting"}
+                </Badge>
+              )}
+            </div>
             <p className="text-muted-foreground mt-1">
               Browse and track prediction markets from Polymarket
             </p>
