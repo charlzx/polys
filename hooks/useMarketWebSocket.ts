@@ -376,6 +376,7 @@ export function useSingleMarketWebSocket(
   const reconnectRef = useRef<NodeJS.Timeout | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const wsHealthRef = useRef<NodeJS.Timeout | null>(null);
+  const lastUpdateRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const latestOddsRef = useRef<number>(initialOdds ?? 50);
   const priceHistoryRef = useRef<number[]>([]);
@@ -393,8 +394,10 @@ export function useSingleMarketWebSocket(
     const priceChange = parseFloat((newYes - prevYes).toFixed(2));
     latestOddsRef.current = newYes;
 
+    const now = Date.now();
+    lastUpdateRef.current = now;
     setCurrentOdds({ yes: newYes, no: Math.round((100 - newYes) * 10) / 10 });
-    setLastUpdate(Date.now());
+    setLastUpdate(now);
 
     priceHistoryRef.current = [...priceHistoryRef.current.slice(-14), priceChange];
     const history = priceHistoryRef.current;
@@ -424,7 +427,7 @@ export function useSingleMarketWebSocket(
           // Start health watchdog — if no book event arrives within the window, fall back to REST polling
           wsHealthRef.current = setTimeout(() => {
             if (!mountedRef.current) return;
-            if (lastUpdate === null) {
+            if (lastUpdateRef.current === null) {
               console.warn("[useSingleMarketWebSocket] No book event received; starting REST fallback poll");
               if (mountedRef.current) setFeedError("No live data received — using REST fallback");
               const fallbackPoll = async () => {
