@@ -220,8 +220,6 @@ export default function AlertsPage() {
                       {newAlert.type === "volume" &&
                         `Fire when 24h volume exceeds $${newAlert.threshold[0]}k`}
                       {newAlert.type === "new" && "Fire when a matching market is found"}
-                      {newAlert.type === "arbitrage" &&
-                        `Fire when arbitrage spread exceeds ${newAlert.threshold[0]}%`}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
