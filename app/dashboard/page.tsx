@@ -606,9 +606,24 @@ export default function DashboardPage() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-small text-muted-foreground">
-                      Loading market intelligence…
-                    </p>
+                    <div className="flex flex-col items-center gap-2 py-4 text-center">
+                      <Sparkle className="h-6 w-6 text-muted-foreground/50" weight="duotone" />
+                      <p className="text-small font-medium">AI Intelligence unavailable</p>
+                      {user?.tier === "free" ? (
+                        <>
+                          <p className="text-caption text-muted-foreground">
+                            Upgrade to Pro to unlock AI-powered market signals and insights.
+                          </p>
+                          <Button variant="outline" size="sm" asChild className="mt-1">
+                            <Link href="/pricing">Upgrade to Pro</Link>
+                          </Button>
+                        </>
+                      ) : (
+                        <p className="text-caption text-muted-foreground">
+                          Market intelligence is temporarily unavailable. Please try again later.
+                        </p>
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>

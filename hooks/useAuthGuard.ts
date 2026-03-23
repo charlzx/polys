@@ -34,9 +34,8 @@ export function useAuthGuard(options?: {
     }
   }, [isAuthenticated, isLoading, router, pathname, options]);
 
-  // For protected pages: show loading while auth is being checked or redirecting
-  const isCheckingAuth = isLoading || (options?.redirectIfNotAuth && !isAuthenticated && !isRedirecting);
-  const shouldShowContent = !options?.redirectIfNotAuth || (isAuthenticated && !isLoading);
+  const isCheckingAuth = isLoading || isRedirecting || (options?.redirectIfNotAuth && !isAuthenticated);
+  const shouldShowContent = !options?.redirectIfNotAuth || (isAuthenticated && !isLoading && !isRedirecting);
 
   return {
     isAuthenticated,

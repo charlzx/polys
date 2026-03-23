@@ -2,6 +2,12 @@
 
 import { useMemo, useEffect, useRef, useState } from "react";
 import type { TransformedMarket } from "@/services/polymarket";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface MarketPulseGridProps {
   markets: TransformedMarket[];
@@ -13,6 +19,16 @@ function getTileColor(change24h: number, yesOdds: number): string {
   if (yesOdds > 60) return "bg-success/40";
   if (yesOdds < 40) return "bg-destructive/40";
   return "bg-muted-foreground/30";
+}
+
+function formatVolume(volume: string | number | undefined): string {
+  if (volume === undefined || volume === null || volume === "") return "N/A";
+  const raw = typeof volume === "string" ? volume.replace(/[$,]/g, "") : String(volume);
+  const num = parseFloat(raw);
+  if (isNaN(num)) return String(volume);
+  if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `$${(num / 1_000).toFixed(1)}K`;
+  return `$${num.toFixed(0)}`;
 }
 
 export function MarketPulseGrid({ markets }: MarketPulseGridProps) {
@@ -57,22 +73,50 @@ export function MarketPulseGrid({ markets }: MarketPulseGridProps) {
           {top30.length} markets
         </span>
       </div>
-      <div className="grid grid-cols-6 gap-1.5">
-        {top30.map((market) => {
-          const isPulsing = pulsingIds.has(market.id);
-          const colorClass = getTileColor(market.change24h, market.yesOdds);
-          return (
-            <div
-              key={market.id}
-              title={`${market.name}\n${market.yesOdds}% YES\n${market.change24h >= 0 ? "+" : ""}${market.change24h}%`}
-              className={`aspect-square rounded transition-all duration-300 cursor-default ${colorClass} ${
-                isPulsing ? "opacity-100 scale-110" : "opacity-70 scale-100"
-              }`}
-              style={{ transition: "opacity 0.3s ease, transform 0.3s ease" }}
-            />
-          );
-        })}
-      </div>
+      <TooltipProvider>
+        <div className="grid grid-cols-6 gap-1.5">
+          {top30.map((market) => {
+            const isPulsing = pulsingIds.has(market.id);
+            const colorClass = getTileColor(market.change24h, market.yesOdds);
+            const changePositive = market.change24h >= 0;
+            const volume = formatVolume(market.volume24h ?? market.volume);
+            return (
+              <Tooltip key={market.id}>
+                <TooltipTrigger asChild>
+                  <div
+                    className={`aspect-square rounded transition-all duration-300 cursor-default ${colorClass} ${
+                      isPulsing ? "opacity-100 scale-110" : "opacity-70 scale-100"
+                    }`}
+                    style={{ transition: "opacity 0.3s ease, transform 0.3s ease" }}
+                  />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[200px] space-y-1 p-2.5">
+                  <p className="font-semibold text-xs leading-snug line-clamp-2">{market.name}</p>
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="text-muted-foreground">YES</span>
+                    <span className="font-medium">{market.yesOdds}¢</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="text-muted-foreground">24h</span>
+                    <span
+                      className={`font-medium ${
+                        changePositive ? "text-success" : "text-destructive"
+                      }`}
+                    >
+                      {changePositive ? "+" : ""}
+                      {market.change24h}%
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="text-muted-foreground">Vol</span>
+                    <span className="font-medium">{volume}</span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
       <div className="flex items-center gap-4 mt-3">
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-sm bg-success/70" />

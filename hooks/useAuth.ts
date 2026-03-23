@@ -61,30 +61,59 @@ export function useAuth() {
   // Load user + profile from a session object
   const hydrateUser = useCallback(
     async (session: Session | null) => {
-      if (!session) {
-        setUser(null);
+      try {
+        if (!session) {
+          setUser(null);
+          setIsLoading(false);
+          return;
+        }
+        const profile = await fetchProfile(supabase, session.user.id);
+        setUser(buildUser(session, profile));
+      } catch {
+        if (session) {
+          setUser(buildUser(session, null));
+        } else {
+          setUser(null);
+        }
+      } finally {
         setIsLoading(false);
-        return;
       }
-      const profile = await fetchProfile(supabase, session.user.id);
-      setUser(buildUser(session, profile));
-      setIsLoading(false);
     },
     [supabase]
   );
 
   useEffect(() => {
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        setIsLoading(false);
+      }
+    }, 5000);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      settled = true;
+      clearTimeout(timeout);
       hydrateUser(session);
+    }).catch(() => {
+      settled = true;
+      clearTimeout(timeout);
+      setUser(null);
+      setIsLoading(false);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      settled = true;
+      clearTimeout(timeout);
       hydrateUser(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, [supabase, hydrateUser]);
 
   const login = useCallback(
