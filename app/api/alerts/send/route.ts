@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Resend } from "resend";
 
 export const runtime = "nodejs";
 
@@ -18,8 +19,7 @@ export interface AlertEmailPayload {
 function isAuthorized(request: Request): boolean {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) return false;
-  const auth = request.headers.get("authorization");
-  return auth === `Bearer ${cronSecret}`;
+  return request.headers.get("authorization") === `Bearer ${cronSecret}`;
 }
 
 function buildEmailHtml(p: AlertEmailPayload): string {
@@ -141,32 +141,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing required fields: to, alertName" }, { status: 400 });
   }
 
+  const resend = new Resend(apiKey);
   const html = buildEmailHtml(payload);
   const subject = `[Polys] ${payload.alertName} — ${payload.changeText}`;
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "Polys Alerts <onboarding@resend.dev>",
-      to: [payload.to],
-      subject,
-      html,
-    }),
+  const { data, error } = await resend.emails.send({
+    from: "Polys Alerts <onboarding@resend.dev>",
+    to: [payload.to],
+    subject,
+    html,
   });
 
-  const data = (await res.json()) as { id?: string; name?: string; message?: string };
-
-  if (!res.ok) {
-    console.error("[alerts/send] Resend error:", data);
-    return NextResponse.json(
-      { error: data.message ?? "Resend API error", details: data },
-      { status: res.status }
-    );
+  if (error) {
+    console.error("[alerts/send] Resend error:", error);
+    return NextResponse.json({ error: error.message, details: error }, { status: 422 });
   }
 
-  return NextResponse.json({ ok: true, emailId: data.id });
+  return NextResponse.json({ ok: true, emailId: data?.id });
 }

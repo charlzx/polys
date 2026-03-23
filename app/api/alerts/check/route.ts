@@ -54,6 +54,8 @@ async function fetchTopMarkets(baseUrl: string): Promise<GammaMarket[]> {
   }
 }
 
+// Returns true if the email was accepted by Resend, false on any error.
+// The check engine only marks an alert 'triggered' when this returns true.
 async function sendAlertEmail(
   baseUrl: string,
   to: string,
@@ -61,27 +63,38 @@ async function sendAlertEmail(
   currentValue: string,
   changeText: string,
   resolvedMarketId: string | null
-) {
+): Promise<boolean> {
   const cronSecret = process.env.CRON_SECRET ?? "";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? baseUrl;
   const marketId = resolvedMarketId ?? alert.market_id;
-  await fetch(`${baseUrl}/api/alerts/send`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${cronSecret}`,
-    },
-    body: JSON.stringify({
-      to,
-      alertName: alert.name,
-      alertType: alert.alert_type,
-      marketName: alert.market_name ?? "Unknown Market",
-      conditionText: alert.condition_text ?? `Threshold: ${alert.threshold}%`,
-      currentValue,
-      changeText,
-      marketUrl: marketId ? `${appUrl}/markets/${marketId}` : `${appUrl}/markets`,
-    }),
-  });
+  try {
+    const res = await fetch(`${baseUrl}/api/alerts/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cronSecret}`,
+      },
+      body: JSON.stringify({
+        to,
+        alertName: alert.name,
+        alertType: alert.alert_type,
+        marketName: alert.market_name ?? "Unknown Market",
+        conditionText: alert.condition_text ?? `Threshold: ${alert.threshold}%`,
+        currentValue,
+        changeText,
+        marketUrl: marketId ? `${appUrl}/markets/${marketId}` : `${appUrl}/markets`,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[alerts/check] Email send HTTP ${res.status}:`, body);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[alerts/check] Email send network error:", err);
+    return false;
+  }
 }
 
 function safeNum(v: unknown): number {
@@ -203,16 +216,26 @@ export async function GET(request: Request) {
     }
 
     if (!shouldFire) continue;
-    triggered++;
 
     const { data: userData } = await supabase.auth.admin.getUserById(alert.user_id);
     const email = userData?.user?.email;
 
+    // Only fire if email delivery succeeds (or email is disabled for this alert).
+    // This prevents losing notifications due to transient Resend errors.
+    let emailOk = true;
     if (alert.delivery_email && email) {
-      await sendAlertEmail(origin, email, alert, currentValue, changeText, resolvedMarketId);
+      emailOk = await sendAlertEmail(origin, email, alert, currentValue, changeText, resolvedMarketId);
     }
 
-    // Transition to 'triggered' — stays quiet until user re-activates it
+    if (!emailOk) {
+      // Email delivery failed — leave alert in 'active' state so it retries on the next run.
+      console.warn(`[alerts/check] Email delivery failed for alert ${alert.id}; will retry`);
+      continue;
+    }
+
+    triggered++;
+
+    // Transition to 'triggered' — stays quiet until user manually re-arms it.
     const updatePayload: Record<string, unknown> = {
       status: "triggered",
       last_triggered_at: new Date().toISOString(),
