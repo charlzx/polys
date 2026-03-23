@@ -10,8 +10,6 @@ import { Footer } from "@/components/Footer";
 import { useMarkets } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import type { TransformedMarket } from "@/services/polymarket";
-// Static display-only UI data (hero section carousel) — not live market data; intentionally not live
-import { mockPredictions } from "@/data/predictions";
 import { features } from "@/data/features";
 import { categories } from "@/data/categories";
 import {
@@ -27,59 +25,49 @@ import {
 import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 
-// Infinite scrolling predictions ticker
-function PredictionsTicker() {
+// Single ticker item — defined outside component to avoid hook-violation during render
+function TickerItem({ market, id }: { market: TransformedMarket; id: string }) {
+  return (
+    <Link
+      href={`/markets/${market.id}`}
+      className="flex items-center gap-2 px-6 py-3 whitespace-nowrap border-r border-border/50 hover:bg-secondary/50 transition-colors"
+    >
+      <span className="text-small text-foreground font-medium line-clamp-1 max-w-[200px]">
+        {market.name}
+      </span>
+      <Badge variant="secondary" className="text-caption shrink-0">
+        {market.yesOdds}¢
+      </Badge>
+      {market.change24h !== 0 && (
+        <span className={`text-caption flex items-center gap-0.5 shrink-0 ${
+          market.change24h > 0 ? "text-success" : "text-destructive"
+        }`}>
+          {market.change24h > 0 ? (
+            <TrendUpIcon weight="bold" className="h-3 w-3" />
+          ) : (
+            <TrendDownIcon weight="bold" className="h-3 w-3" />
+          )}
+          {Math.abs(market.change24h)}%
+        </span>
+      )}
+    </Link>
+  );
+}
+
+// Infinite scrolling live markets ticker
+function PredictionsTicker({ markets }: { markets: TransformedMarket[] }) {
+  const items = markets.slice(0, 10);
+  if (items.length === 0) {
+    return (
+      <div className="border-b border-border bg-secondary/30 h-[42px] animate-pulse" />
+    );
+  }
+
   return (
     <div className="relative overflow-hidden border-b border-border bg-secondary/30">
       <div className="flex animate-scroll">
-        {/* First set */}
-        {mockPredictions.map((prediction, index) => (
-          <div
-            key={`first-${index}`}
-            className="flex items-center gap-2 px-6 py-3 whitespace-nowrap border-r border-border/50"
-          >
-            <span className="text-small text-foreground font-medium">{prediction.text}</span>
-            <Badge variant={prediction.change >= 0 ? "default" : "secondary"} className="text-caption">
-              {prediction.probability}%
-            </Badge>
-            {prediction.change !== 0 && (
-              <span className={`text-caption flex items-center gap-0.5 ${
-                prediction.change > 0 ? "text-success" : "text-destructive"
-              }`}>
-                {prediction.change > 0 ? (
-                  <TrendUpIcon weight="bold" className="h-3 w-3" />
-                ) : (
-                  <TrendDownIcon weight="bold" className="h-3 w-3" />
-                )}
-                {Math.abs(prediction.change)}%
-              </span>
-            )}
-          </div>
-        ))}
-        {/* Second set for seamless loop */}
-        {mockPredictions.map((prediction, index) => (
-          <div
-            key={`second-${index}`}
-            className="flex items-center gap-2 px-6 py-3 whitespace-nowrap border-r border-border/50"
-          >
-            <span className="text-small text-foreground font-medium">{prediction.text}</span>
-            <Badge variant={prediction.change >= 0 ? "default" : "secondary"} className="text-caption">
-              {prediction.probability}%
-            </Badge>
-            {prediction.change !== 0 && (
-              <span className={`text-caption flex items-center gap-0.5 ${
-                prediction.change > 0 ? "text-success" : "text-destructive"
-              }`}>
-                {prediction.change > 0 ? (
-                  <TrendUpIcon weight="bold" className="h-3 w-3" />
-                ) : (
-                  <TrendDownIcon weight="bold" className="h-3 w-3" />
-                )}
-                {Math.abs(prediction.change)}%
-              </span>
-            )}
-          </div>
-        ))}
+        {items.map((m) => <TickerItem key={`first-${m.id}`} market={m} id={`first-${m.id}`} />)}
+        {items.map((m) => <TickerItem key={`second-${m.id}`} market={m} id={`second-${m.id}`} />)}
       </div>
     </div>
   );
@@ -336,8 +324,8 @@ export default function LandingPage() {
         onMobileNavOpen={() => setMobileNavOpen(true)}
       />
 
-      {/* Predictions Ticker */}
-      <PredictionsTicker />
+      {/* Live markets ticker — top 10 by volume */}
+      <PredictionsTicker markets={liveMarkets} />
 
       {/* Hero Section */}
       <section

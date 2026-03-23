@@ -112,6 +112,22 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - **AppHeader notifications**: bell badge appears only when real triggered alerts exist in last 24h; popover lists them with type, description, and time ago
 - **Cleanup**: `data/quickStats.ts` emptied (replaced by hook); `recentAlerts` mock array removed from `data/alerts.ts`
 
+## Portfolio Repurpose & Landing Ticker (Task #10 — COMPLETE)
+- **Portfolio page** (`app/portfolio/page.tsx`): Fully rewritten as "Tracked Markets" dashboard
+  - Uses `useWatchlist` for watchlist items + `useMarkets` for live market hydration
+  - Fallback stub from stored metadata for markets not in top-50 API response
+  - Summary stats: total watched, up 24h, down 24h (3-card grid)
+  - Market grid with odds, 24h change, volume per row; links to market detail page
+  - Empty state with CTA to browse markets; skeleton loading states
+  - All mocked portfolio data (`portfolioStats`, `positions`, `performanceData`, `categoryData`), charts, and "Connect Wallet" button removed
+- **Landing page ticker** (`app/page.tsx`): Now shows real live Polymarket markets (top 10 by volume)
+  - `PredictionsTicker` receives `liveMarkets` prop from the already-fetched `useMarkets` + `useMarketWebSocket` data
+  - Shows real market name, YES odds (in cents), and 24h change with trend icon
+  - `TickerItem` defined as module-level function to avoid React invalid-hook-call error
+  - Pulse loading skeleton while markets are loading
+  - Each ticker item links to the market detail page
+- **Cleanup**: `data/predictions.ts` emptied (`export {}` stub)
+
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
 - **Build**: `pnpm run build`
