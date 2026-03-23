@@ -55,22 +55,27 @@ function WhaleSkeleton() {
   );
 }
 
-function WhaleCard({
-  whale,
-  rank,
-}: {
-  whale: {
-    address: string;
-    portfolioValue: number;
-    totalVolume: number;
-    winRate: number;
-    openPositions: number;
-    recentTrades: number;
-    lastActive: string | null;
-    hasData: boolean;
-  };
-  rank: number;
-}) {
+interface RecentTrade {
+  title: string;
+  side: string;
+  outcome: string;
+  amount: number;
+  timestamp: string;
+}
+
+interface WhaleEntry {
+  address: string;
+  portfolioValue: number;
+  totalVolume: number;
+  winRate: number;
+  openPositions: number;
+  recentTrades: number;
+  recentTradesList: RecentTrade[];
+  lastActive: string | null;
+  hasData: boolean;
+}
+
+function WhaleCard({ whale, rank }: { whale: WhaleEntry; rank: number }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -138,9 +143,26 @@ function WhaleCard({
               </div>
             </div>
 
+            {/* Recent trade snippets */}
+            {whale.recentTradesList && whale.recentTradesList.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                <div className="text-caption text-muted-foreground font-medium mb-1">Recent trades</div>
+                {whale.recentTradesList.map((t, i) => (
+                  <div key={i} className="flex items-center gap-2 text-caption">
+                    <span className={`font-semibold shrink-0 ${t.side === "BUY" ? "text-success" : "text-destructive"}`}>
+                      {t.side}
+                    </span>
+                    <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{t.outcome}</Badge>
+                    <span className="truncate text-muted-foreground">{t.title}</span>
+                    <span className="shrink-0 font-medium">{formatDollar(t.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Footer */}
             <div className="flex items-center justify-between mt-2 text-caption text-muted-foreground">
-              <span>{whale.recentTrades > 0 ? `${whale.recentTrades} recent trades` : "No recent trades"}</span>
+              <span>{whale.recentTrades > 0 ? `${whale.recentTrades} total trades` : "No trades"}</span>
               <span>Last active: {relativeTime(whale.lastActive)}</span>
             </div>
           </CardContent>
