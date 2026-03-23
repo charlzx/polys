@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Session } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 
 export interface User {
   id: string;
@@ -12,43 +12,80 @@ export interface User {
   tier: "free" | "pro" | "premium";
 }
 
-function sessionToUser(session: Session | null): User | null {
-  if (!session?.user) return null;
+interface Profile {
+  id: string;
+  name: string | null;
+  tier: "free" | "pro" | "premium";
+  avatar_url: string | null;
+}
+
+// Fetch profile row; returns null if table doesn't exist yet or row not found
+async function fetchProfile(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<Profile | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, name, tier, avatar_url")
+    .eq("id", userId)
+    .single();
+
+  if (error) return null;
+  return data as Profile;
+}
+
+function buildUser(session: Session, profile: Profile | null): User {
   const u = session.user;
   const meta = u.user_metadata ?? {};
   return {
     id: u.id,
-    name: meta.name ?? meta.full_name ?? u.email?.split("@")[0] ?? "User",
     email: u.email ?? "",
-    avatar: meta.avatar_url,
-    tier: (meta.tier as User["tier"]) ?? "free",
+    name:
+      profile?.name ??
+      meta.name ??
+      meta.full_name ??
+      u.email?.split("@")[0] ??
+      "User",
+    avatar: profile?.avatar_url ?? meta.avatar_url,
+    tier: profile?.tier ?? (meta.tier as User["tier"]) ?? "free",
   };
 }
 
 export function useAuth() {
-  // Create one client instance per hook call; createBrowserClient reuses the same
-  // underlying GoTrue instance via a module-level singleton inside @supabase/ssr,
-  // so this is cheap and safe to call inside a hook.
+  // createBrowserClient reuses an internal singleton; creating it inside the hook is cheap.
   const supabase = useMemo(() => createClient(), []);
 
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Load user + profile from a session object
+  const hydrateUser = useCallback(
+    async (session: Session | null) => {
+      if (!session) {
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+      const profile = await fetchProfile(supabase, session.user.id);
+      setUser(buildUser(session, profile));
+      setIsLoading(false);
+    },
+    [supabase]
+  );
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(sessionToUser(session));
-      setIsLoading(false);
+      hydrateUser(session);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(sessionToUser(session));
-      setIsLoading(false);
+      hydrateUser(session);
     });
 
     return () => subscription.unsubscribe();
-  }, [supabase]);
+  }, [supabase, hydrateUser]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<string | null> => {
@@ -59,13 +96,30 @@ export function useAuth() {
   );
 
   const signup = useCallback(
-    async (email: string, password: string, name: string): Promise<string | null> => {
-      const { error } = await supabase.auth.signUp({
+    async (
+      email: string,
+      password: string,
+      name: string
+    ): Promise<string | null> => {
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { name, tier: "free" } },
       });
-      return error ? error.message : null;
+
+      if (error) return error.message;
+
+      // Insert profile row immediately if session is available (email confirmation disabled)
+      if (data.session && data.user) {
+        await supabase.from("profiles").upsert({
+          id: data.user.id,
+          name,
+          tier: "free",
+          avatar_url: null,
+        });
+      }
+
+      return null;
     },
     [supabase]
   );
