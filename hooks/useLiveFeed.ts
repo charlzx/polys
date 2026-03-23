@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useWhaleActivity } from "@/hooks/useWhales";
 import { useMarkets } from "@/services/polymarket";
 import { useArbitrage } from "@/hooks/useArbitrage";
@@ -50,6 +50,9 @@ export function useLiveFeed(limit = 20): {
   events: FeedEvent[];
   isLoading: boolean;
 } {
+  // Stable first-seen timestamps: persist across recomputes so events don't look artificially fresh
+  const firstSeenRef = useRef<Map<string, number>>(new Map());
+
   const { data: whaleData, isLoading: whaleLoading } = useWhaleActivity(30);
   const { data: markets, isLoading: marketsLoading } = useMarkets({
     limit: 30,
@@ -104,6 +107,13 @@ export function useLiveFeed(limit = 20): {
       }
       return bestId;
     };
+
+    // Return a stable timestamp for an event id (cached at first-seen; never refreshed)
+    const stableTs = (id: string, fallback: number): number => {
+      if (!firstSeenRef.current.has(id)) firstSeenRef.current.set(id, fallback);
+      return firstSeenRef.current.get(id)!;
+    };
+
     const all: FeedEvent[] = [];
     const now = Date.now();
 
@@ -162,13 +172,14 @@ export function useLiveFeed(limit = 20): {
         const change = m.change24h;
         if (Math.abs(change) > 3) {
           const isUp = change > 0;
+          const eid = `price-${m.id}`;
           all.push({
-            id: `price-${m.id}`,
+            id: eid,
             type: isUp ? "price_up" : "price_down",
             title: `${isUp ? "▲" : "▼"} ${isUp ? "+" : ""}${change}% in 24h`,
             subtitle: truncate(m.name),
             marketId: m.id,
-            timestamp: now - (i + 1) * 120_000,
+            timestamp: stableTs(eid, now - (i + 1) * 120_000),
           });
         }
       });
@@ -180,13 +191,14 @@ export function useLiveFeed(limit = 20): {
         const hoursLeft = (end - now) / 3_600_000;
         if (hoursLeft > 0 && hoursLeft <= 48) {
           const h = Math.round(hoursLeft);
+          const eid = `milestone-${m.id}`;
           all.push({
-            id: `milestone-${m.id}`,
+            id: eid,
             type: "milestone",
             title: `Resolves in ~${h}h`,
             subtitle: truncate(m.name),
             marketId: m.id,
-            timestamp: now - (markets.length + i + 1) * 120_000,
+            timestamp: stableTs(eid, now - (markets.length + i + 1) * 120_000),
           });
         }
       });
@@ -198,13 +210,14 @@ export function useLiveFeed(limit = 20): {
         .filter((o) => o.status === "active" && o.polyMarketId)
         .slice(0, 3)
         .forEach((opp, i) => {
+          const eid = `arb-${opp.id}`;
           all.push({
-            id: `arb-${opp.id}`,
+            id: eid,
             type: "arb",
             title: `${opp.profit.toFixed(1)}% arb: ${opp.platform2} vs ${opp.platform1}`,
             subtitle: truncate(opp.market),
             marketId: opp.polyMarketId!,
-            timestamp: now - i * 180_000,
+            timestamp: stableTs(eid, now - i * 180_000),
           });
         });
     }
