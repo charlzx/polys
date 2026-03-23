@@ -61,6 +61,7 @@ interface ClobPriceChange {
   size: string;
   best_bid?: string;
   best_ask?: string;
+  hash?: string;
 }
 
 interface ClobPriceChangeEvent {
@@ -234,12 +235,12 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
           setUpdates((prev) => {
             const next = new Map(prev);
             events.forEach((msg) => {
-              const assetId = msg.asset_id;
-              if (!assetId) return;
-              const marketId = tokenToMarket.get(assetId);
-              if (!marketId) return;
-
               if (msg.event_type === "book") {
+                // book events carry top-level asset_id
+                const assetId = msg.asset_id;
+                if (!assetId) return;
+                const marketId = tokenToMarket.get(assetId);
+                if (!marketId) return;
                 const bookMsg = msg as ClobBookEvent;
                 // Record receipt and clear health watchdog on first book event
                 if (!lastBookEventRef.current) {
@@ -251,20 +252,22 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
                 if (mid === null) return;
                 applyMidUpdate(marketId, mid, next, prev);
               } else if (msg.event_type === "price_change") {
-                // price_change events include best_bid/best_ask — use them for fresher updates
+                // price_change events include per-item asset_id (new schema) or top-level (old schema)
                 const pcMsg = msg as ClobPriceChangeEvent;
                 const changes = pcMsg.price_changes ?? pcMsg.changes ?? [];
-                // Find the item for this token (per-item asset_id or top-level)
-                const change = changes.find((c) =>
-                  (c.asset_id ?? pcMsg.asset_id) === assetId
-                );
-                if (change?.best_bid && change?.best_ask) {
-                  const bid = parseFloat(change.best_bid);
-                  const ask = parseFloat(change.best_ask);
-                  if (bid > 0 && ask < 1 && ask > bid) {
-                    applyMidUpdate(marketId, (bid + ask) / 2, next, prev);
+                changes.forEach((c) => {
+                  const assetId = c.asset_id ?? pcMsg.asset_id;
+                  if (!assetId) return;
+                  const marketId = tokenToMarket.get(assetId);
+                  if (!marketId) return;
+                  if (c.best_bid && c.best_ask) {
+                    const bid = parseFloat(c.best_bid);
+                    const ask = parseFloat(c.best_ask);
+                    if (bid > 0 && ask < 1 && ask > bid) {
+                      applyMidUpdate(marketId, (bid + ask) / 2, next, prev);
+                    }
                   }
-                }
+                });
               }
             });
             return next;
@@ -535,7 +538,7 @@ export function useSingleMarketWebSocket(
                   const trades: LiveTrade[] = relevant
                     .filter((c) => parseFloat(c.size) > 0)
                     .map((c) => ({
-                      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                      id: c.hash ?? `${c.side}-${c.price}-${c.size}-${Date.now()}`,
                       side: c.side === "BUY" ? "buy" : "sell",
                       price: parseFloat(c.price),
                       size: Math.round(parseFloat(c.size)),
