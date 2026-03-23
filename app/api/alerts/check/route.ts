@@ -5,7 +5,6 @@ export const runtime = "nodejs";
 
 // After firing, the alert transitions to 'triggered' status.
 // It stays triggered until the user manually re-activates it ('active').
-// This prevents repeat emails while the condition remains true.
 // For volume/odds alerts the cooldown is a secondary guard in case of rapid re-arm.
 const COOLDOWN_MINUTES = 60;
 
@@ -40,10 +39,27 @@ function isAuthorized(request: Request): boolean {
   return request.headers.get("authorization") === `Bearer ${cronSecret}`;
 }
 
-async function fetchTopMarkets(baseUrl: string): Promise<GammaMarket[]> {
+// Fetch market by explicit ID — ensures lower-volume markets are evaluated correctly
+async function fetchMarketById(baseUrl: string, marketId: string): Promise<GammaMarket | null> {
+  try {
+    const res = await fetch(`${baseUrl}/api/markets?id=${encodeURIComponent(marketId)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { markets?: GammaMarket[] } | GammaMarket[];
+    if (Array.isArray(data)) return data[0] ?? null;
+    if (Array.isArray(data.markets)) return data.markets[0] ?? null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Fetch top markets by volume — used for keyword/name matching and "new market" alerts
+async function fetchTopMarkets(baseUrl: string, limit = 200): Promise<GammaMarket[]> {
   try {
     const res = await fetch(
-      `${baseUrl}/api/markets?limit=100&active=true&order=volume24hr&ascending=false`,
+      `${baseUrl}/api/markets?limit=${limit}&active=true&order=volume24hr&ascending=false`,
       { cache: "no-store" }
     );
     if (!res.ok) return [];
@@ -146,12 +162,35 @@ export async function GET(request: Request) {
     return NextResponse.json({ checked: 0, triggered: 0 });
   }
 
-  const markets = await fetchTopMarkets(origin);
+  // Fetch top markets for name matching and "new market" alerts.
+  // Also pre-fetch specific markets by ID for alerts that have market_id stored.
+  const [topMarkets, specificMarketResults] = await Promise.all([
+    fetchTopMarkets(origin),
+    // Fetch each alert's specific market by ID (when set), in parallel
+    Promise.all(
+      alerts
+        .filter((a) => a.market_id)
+        .map(async (a) => ({
+          alertId: a.id,
+          market: await fetchMarketById(origin, a.market_id!),
+        }))
+    ),
+  ]);
+
+  // Build lookup maps
   const marketById = new Map<string, GammaMarket>();
   const marketByName = new Map<string, GammaMarket>();
-  for (const m of markets) {
+  for (const m of topMarkets) {
     marketById.set(m.id, m);
     marketByName.set(m.question.toLowerCase(), m);
+  }
+  // Override with freshly fetched specific-market data (more accurate for off-top-100 markets)
+  const specificByAlertId = new Map<string, GammaMarket>();
+  for (const { alertId, market } of specificMarketResults) {
+    if (market) {
+      specificByAlertId.set(alertId, market);
+      marketById.set(market.id, market);
+    }
   }
 
   let triggered = 0;
@@ -165,11 +204,13 @@ export async function GET(request: Request) {
       if (now - lastMs < cutoffMs) continue;
     }
 
+    // Resolve market: prefer the directly-fetched specific market, then top-market lookup
     const market =
+      specificByAlertId.get(alert.id) ??
       (alert.market_id ? marketById.get(alert.market_id) : null) ??
       (alert.market_name
         ? marketByName.get(alert.market_name.toLowerCase()) ??
-          findFuzzyMarket(markets, alert.market_name)
+          findFuzzyMarket(topMarkets, alert.market_name)
         : null);
 
     let shouldFire = false;
@@ -200,7 +241,7 @@ export async function GET(request: Request) {
       const keyword = (alert.market_name ?? "").toLowerCase();
       const seen = new Set<string>(alert.seen_market_ids ?? []);
       if (keyword) {
-        const matched = markets.filter(
+        const matched = topMarkets.filter(
           (m) => m.question.toLowerCase().includes(keyword) && !seen.has(m.id)
         );
         if (matched.length > 0) {
@@ -221,14 +262,13 @@ export async function GET(request: Request) {
     const email = userData?.user?.email;
 
     // Only fire if email delivery succeeds (or email is disabled for this alert).
-    // This prevents losing notifications due to transient Resend errors.
+    // On failure, the alert stays 'active' and retries on the next cron run.
     let emailOk = true;
     if (alert.delivery_email && email) {
       emailOk = await sendAlertEmail(origin, email, alert, currentValue, changeText, resolvedMarketId);
     }
 
     if (!emailOk) {
-      // Email delivery failed — leave alert in 'active' state so it retries on the next run.
       console.warn(`[alerts/check] Email delivery failed for alert ${alert.id}; will retry`);
       continue;
     }
@@ -251,7 +291,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     checked: alerts.length,
     triggered,
-    marketsScanned: markets.length,
+    marketsScanned: topMarkets.length,
     timestamp: new Date().toISOString(),
   });
 }

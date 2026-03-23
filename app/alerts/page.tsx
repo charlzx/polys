@@ -60,7 +60,7 @@ export default function AlertsPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [newAlert, setNewAlert] = useState<{
     name: string;
-    type: "odds" | "volume" | "new" | "arbitrage";
+    type: "odds" | "volume" | "new";
     market: string;
     threshold: number[];
     deliveryEmail: boolean;
@@ -172,7 +172,7 @@ export default function AlertsPage() {
                       onValueChange={(v) =>
                         setNewAlert({
                           ...newAlert,
-                          type: v as "odds" | "volume" | "new" | "arbitrage",
+                          type: v as "odds" | "volume" | "new",
                         })
                       }
                     >

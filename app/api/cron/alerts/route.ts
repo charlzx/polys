@@ -2,21 +2,21 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-// Cron entry-point for alert evaluation.
-// Schedule this endpoint to be called every 5 minutes by your scheduler.
+// Cron entry-point: fires alert evaluation every 5 minutes.
 //
-// Example: curl -H "Authorization: Bearer $CRON_SECRET" https://your-app/api/cron/alerts
+// Scheduling options:
+//   1. Vercel: vercel.json defines schedule "*/5 * * * *". Vercel automatically
+//      passes Authorization: Bearer $CRON_SECRET using the env var set in the project.
+//   2. External scheduler (Replit deployment, cron-job.org, Upstash QStash):
+//      Call GET https://<your-domain>/api/cron/alerts
+//      with header  Authorization: Bearer <CRON_SECRET>  every 5 minutes.
 //
-// On Replit with deployment, use an external service (e.g., cron-job.org, Upstash QStash)
-// to call this URL every 5 minutes with the Authorization header.
-//
-// CRON_SECRET must match the value set in your environment variables.
+// CRON_SECRET must be set in environment variables / Replit secrets.
 
 function isAuthorized(request: Request): boolean {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) return false;
-  const auth = request.headers.get("authorization");
-  return auth === `Bearer ${cronSecret}`;
+  return request.headers.get("authorization") === `Bearer ${cronSecret}`;
 }
 
 export async function GET(request: Request) {
@@ -25,9 +25,8 @@ export async function GET(request: Request) {
   }
 
   const { origin } = new URL(request.url);
-
-  // Forward to the alert check engine with the cron secret
   const cronSecret = process.env.CRON_SECRET ?? "";
+
   const res = await fetch(`${origin}/api/alerts/check`, {
     headers: { Authorization: `Bearer ${cronSecret}` },
   });

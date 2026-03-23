@@ -135,9 +135,9 @@ export const alertStats: AlertStat[] = [
   { label: "Triggered Today", value: "5", icon: TrendUpIcon },
 ];
 
+// 'arbitrage' is intentionally excluded — the check engine does not evaluate it
 export const alertTypes = [
   { value: "odds", label: "Odds Movement" },
   { value: "volume", label: "Volume Spike" },
-  { value: "arbitrage", label: "Arbitrage Opportunity" },
   { value: "new", label: "New Market" },
 ];

@@ -61,13 +61,14 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - **Env secrets required**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 ## Email Alerts (Task #5 — COMPLETE)
-- **Email provider**: Resend (`https://api.resend.com/emails`) — raw fetch with `RESEND_API_KEY`; no SDK dependency
+- **Email provider**: Resend SDK (`resend` npm package) — `new Resend(apiKey).emails.send(...)`; `RESEND_API_KEY` required
 - **Send route**: `app/api/alerts/send/route.ts` — POST; requires `Authorization: Bearer $CRON_SECRET` (internal-only, prevents open relay abuse); builds styled HTML email; returns `{ ok, emailId }`
-- **Check/eval engine**: `app/api/alerts/check/route.ts` — GET; requires `Authorization: Bearer $CRON_SECRET`; reads active alerts; fires email; transitions `status` → `'triggered'` to prevent re-firing; 60-min cooldown guard as secondary defense
+- **Check/eval engine**: `app/api/alerts/check/route.ts` — GET; requires `Authorization: Bearer $CRON_SECRET`; reads active alerts; for each alert with a `market_id` fetches that market directly from Gamma API (so off-top-100 markets are evaluated correctly); also fetches top-200 by volume for name/keyword matching and "new market" detection; fires email; transitions `status` → `'triggered'` to prevent re-firing; 60-min cooldown guard as secondary defense
 - **Alert dedup**: After firing, status transitions `active` → `triggered`. Alert stays silent until user manually re-arms it from the UI. This prevents infinite re-triggering while condition remains true.
 - **"New market" semantics**: Tracks seen market IDs in `seen_market_ids text[]` column. Only fires on markets NOT previously seen by this alert. Re-arming via UI resets `seen_market_ids = []` so fresh markets can trigger.
 - **Status lifecycle**: `active` (watching) → `triggered` (fired, silent) → `active` (re-armed by user); or `active` ↔ `paused` (user paused)
-- **Cron entry-point**: `app/api/cron/alerts/route.ts` — GET; requires same `Authorization: Bearer $CRON_SECRET`; schedule every 5 minutes via external scheduler (cron-job.org or Upstash QStash)
+- **Cron entry-point**: `app/api/cron/alerts/route.ts` — GET; requires `Authorization: Bearer $CRON_SECRET`; fires every 5 minutes via either (a) Vercel (vercel.json schedule="*/5 * * * *", set CRON_SECRET in Vercel project settings) or (b) external scheduler: on cron-job.org create a job for `GET https://<deployed-domain>/api/cron/alerts` with header `Authorization: Bearer <CRON_SECRET>` and 5-minute interval
+- **vercel.json**: committed `crons` config with `path=/api/cron/alerts` and `schedule="*/5 * * * *"` — Vercel automatically injects CRON_SECRET
 - **Alerts CRUD hook**: `hooks/useAlerts.ts` — stable `useMemo` Supabase client; `toggleAlert` handles all 3 status transitions; re-arm clears `seen_market_ids`
 - **Alerts page**: `app/alerts/page.tsx` — "Fired" badge + "Re-arm" button for triggered alerts; green border highlight; Switch toggle for active/paused
 - **Supabase migration**: `supabase/migrations/002_alerts.sql` — `public.alerts` table with `seen_market_ids text[] default '{}'`; run in Supabase Dashboard SQL Editor; includes idempotent ALTER for existing tables
