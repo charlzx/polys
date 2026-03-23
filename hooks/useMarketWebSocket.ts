@@ -136,17 +136,13 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
   const pollMarkets = useCallback(async (ids: string[]) => {
     if (!ids.length || !mountedRef.current) return;
     try {
-      const sp = new URLSearchParams({
-        limit: "100",
-        active: "true",
-        closed: "false",
-        order: "volume24hr",
-        ascending: "false",
-      });
-      const res = await fetch(`${MARKETS_API}?${sp.toString()}`);
-      if (!res.ok) return;
-
-      const data: GammaMarketSlim[] = await res.json();
+      // Fetch each tracked market individually to guarantee coverage regardless of volume rank
+      const results = await Promise.allSettled(
+        ids.map((id) => fetch(`${MARKETS_API}/${id}`).then((r) => r.ok ? r.json() as Promise<GammaMarketSlim> : Promise.reject(r.status)))
+      );
+      const data: GammaMarketSlim[] = results
+        .filter((r): r is PromiseFulfilledResult<GammaMarketSlim> => r.status === "fulfilled")
+        .map((r) => r.value);
       const idSet = new Set(ids);
 
       setUpdates((prev) => {

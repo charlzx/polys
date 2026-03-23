@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const GAMMA_API = "https://gamma-api.polymarket.com";
 
+// Next.js 15 App Router: dynamic route params are a Promise
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
