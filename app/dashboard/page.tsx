@@ -23,6 +23,7 @@ import { quickStats } from "@/data/quickStats";
 import { recentAlerts } from "@/data/alerts";
 import { useMarkets } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
+import { WhaleActivityFeed } from "@/components/WhaleActivityFeed";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -457,6 +458,12 @@ export default function DashboardPage() {
                       </Button>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <WhaleActivityFeed limit={6} showHeader={true} />
                 </CardContent>
               </Card>
             </div>

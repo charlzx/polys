@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { MagnifyingGlass, Bell, House, TrendUpIcon, ArrowsClockwise, Wallet, Sparkle } from "@phosphor-icons/react";
+import { MagnifyingGlass, Bell, House, TrendUpIcon, ArrowsClockwise, Wallet, Sparkle, Eye } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -53,6 +53,7 @@ const notifications = [
 const navTabs = [
   { label: "Dashboard", href: "/dashboard", icon: House },
   { label: "Markets", href: "/markets", icon: TrendUpIcon },
+  { label: "Whales", href: "/whales", icon: Eye },
   { label: "Arbitrage", href: "/arbitrage", icon: ArrowsClockwise, premium: true },
   { label: "Portfolio", href: "/portfolio", icon: Wallet },
   { label: "Alerts", href: "/alerts", icon: Bell },
@@ -86,7 +87,7 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="flex items-center gap-2">
               <span className="text-subtitle font-bold">
-                Poly<span className="text-primary">Pro</span>
+                Poly<span className="text-primary">s</span>
               </span>
             </Link>
           </div>
