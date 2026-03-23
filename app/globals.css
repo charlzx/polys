@@ -42,7 +42,7 @@
   --color-popover: oklch(100% 0 0);
   --color-popover-foreground: oklch(20% 0 0);
   
-  --color-primary: oklch(58% 0.24 255);
+  --color-primary: oklch(60% 0.26 265);
   --color-primary-foreground: oklch(100% 0 0);
   
   --color-secondary: oklch(96% 0 0);
@@ -51,7 +51,7 @@
   --color-muted: oklch(92% 0 0);
   --color-muted-foreground: oklch(50% 0 0);
   
-  --color-accent: oklch(58% 0.24 255);
+  --color-accent: oklch(60% 0.26 265);
   --color-accent-foreground: oklch(100% 0 0);
   
   --color-destructive: oklch(58% 0.22 25);
@@ -65,14 +65,14 @@
   
   --color-border: oklch(92% 0 0);
   --color-input: oklch(92% 0 0);
-  --color-ring: oklch(58% 0.24 255);
+  --color-ring: oklch(60% 0.26 265);
   
   /* Chart colors */
-  --color-chart-1: oklch(58% 0.24 255);
+  --color-chart-1: oklch(60% 0.26 265);
   --color-chart-2: oklch(45% 0.15 145);
   --color-chart-3: oklch(58% 0.22 25);
   --color-chart-4: oklch(68% 0.19 85);
-  --color-chart-5: oklch(55% 0.18 290);
+  --color-chart-5: oklch(60% 0.26 265);
 }
 
 @layer base {
@@ -92,7 +92,7 @@
     --color-popover: oklch(20% 0 0);
     --color-popover-foreground: oklch(98% 0 0);
     
-    --color-primary: oklch(58% 0.24 255);
+    --color-primary: oklch(60% 0.26 265);
     --color-primary-foreground: oklch(100% 0 0);
     
     --color-secondary: oklch(25% 0 0);
@@ -101,7 +101,7 @@
     --color-muted: oklch(30% 0 0);
     --color-muted-foreground: oklch(65% 0 0);
     
-    --color-accent: oklch(58% 0.24 255);
+    --color-accent: oklch(60% 0.26 265);
     --color-accent-foreground: oklch(100% 0 0);
     
     --color-destructive: oklch(58% 0.22 25);
@@ -115,13 +115,13 @@
     
     --color-border: oklch(35% 0 0);
     --color-input: oklch(35% 0 0);
-    --color-ring: oklch(58% 0.24 255);
+    --color-ring: oklch(60% 0.26 265);
     
-    --color-chart-1: oklch(62% 0.24 255);
+    --color-chart-1: oklch(60% 0.26 265);
     --color-chart-2: oklch(50% 0.15 145);
     --color-chart-3: oklch(62% 0.22 25);
     --color-chart-4: oklch(72% 0.19 85);
-    --color-chart-5: oklch(58% 0.18 290);
+    --color-chart-5: oklch(60% 0.26 265);
   }
   
   * {
@@ -136,7 +136,7 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--font-geist), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
