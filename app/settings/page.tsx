@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useAuth } from "@/hooks/useAuth";
 import { AppHeader } from "@/components/AppHeader";
+import { createClient } from "@/lib/supabase/client";
 import {
   User,
   Shield,
@@ -43,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTheme } from "next-themes";
+import { useToast } from "@/hooks/use-toast";
 
 // Settings sections
 const settingsSections = [
@@ -104,27 +107,86 @@ function SettingsContent() {
   const activeSection = searchParams?.get("tab") || null;
   const { theme, setTheme } = useTheme();
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const supabase = useMemo(() => createClient(), []);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-  // Mock user data
-  const [userTier, setUserTier] = useState("pro");
+  // Profile form state — seeded from real auth user
   const [profile, setProfile] = useState({
-    name: "Alex Chen",
-    email: "alex@example.com",
+    name: "",
+    email: "",
     timezone: "America/New_York",
   });
 
+  // Notification preferences stored in profiles table
   const [notifications, setNotifications] = useState({
     alertsEmail: true,
-    alertsPush: true,
+    alertsPush: false,
     portfolioDaily: false,
     portfolioWeekly: true,
     productUpdates: true,
     marketing: false,
   });
+
+  // Seed profile from user once loaded
+  useEffect(() => {
+    if (!user) return;
+    setProfile((prev) => ({
+      ...prev,
+      name: user.name || "",
+      email: user.email || "",
+    }));
+  }, [user]);
+
+  // Load notification preferences from profiles table
+  const loadNotificationPrefs = useCallback(async () => {
+    if (!user?.id) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("email_alerts_enabled")
+      .eq("id", user.id)
+      .single();
+    if (data) {
+      setNotifications((prev) => ({
+        ...prev,
+        alertsEmail: data.email_alerts_enabled ?? true,
+      }));
+    }
+  }, [supabase, user?.id]);
+
+  useEffect(() => {
+    loadNotificationPrefs();
+  }, [loadNotificationPrefs]);
+
+  const handleSaveProfile = async () => {
+    if (!user?.id) return;
+    setIsSavingProfile(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ name: profile.name })
+      .eq("id", user.id);
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Profile saved", description: "Your display name has been updated." });
+    }
+    setIsSavingProfile(false);
+  };
+
+  const handleToggleEmailAlerts = async (checked: boolean) => {
+    if (!user?.id) return;
+    setNotifications((prev) => ({ ...prev, alertsEmail: checked }));
+    await supabase
+      .from("profiles")
+      .update({ email_alerts_enabled: checked })
+      .eq("id", user.id);
+  };
 
   // Show loading while checking auth
   if (!shouldShowContent) {
@@ -135,18 +197,17 @@ function SettingsContent() {
     );
   }
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
     if (deleteConfirmEmail !== profile.email) {
-      alert("Email doesn't match");
+      toast({ title: "Email mismatch", description: "The email you entered doesn't match.", variant: "destructive" });
       return;
     }
-
     setIsDeleting(true);
-    setTimeout(() => {
-      setIsDeleting(false);
-      setShowDeleteModal(false);
-      alert("Account scheduled for deletion");
-    }, 1500);
+    // Sign out and let the user know — full deletion requires a server-side action
+    await supabase.auth.signOut();
+    toast({ title: "Account deletion requested", description: "Please contact support to complete account deletion." });
+    setIsDeleting(false);
+    setShowDeleteModal(false);
   };
 
   const navigateToSection = (sectionId: string | null) => {
@@ -157,6 +218,8 @@ function SettingsContent() {
     }
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
+
+  const userTier = user?.tier ?? "free";
 
   const renderSectionContent = () => {
     switch (activeSection) {
@@ -172,11 +235,8 @@ function SettingsContent() {
               <Avatar className="h-16 w-16">
                 <AvatarFallback className="bg-primary text-primary-foreground text-title">
                   {profile.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase()
-                    .slice(0, 2)}
+                    ? profile.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+                    : "??"}
                 </AvatarFallback>
               </Avatar>
               <div>
@@ -227,7 +287,9 @@ function SettingsContent() {
               </div>
             </div>
 
-            <Button className="mt-4">Save Changes</Button>
+            <Button className="mt-4" onClick={handleSaveProfile} disabled={isSavingProfile}>
+              {isSavingProfile ? "Saving..." : "Save Changes"}
+            </Button>
           </motion.div>
         );
 
@@ -267,7 +329,7 @@ function SettingsContent() {
                   <div>
                     <p className="text-small font-medium">Current Session</p>
                     <p className="text-caption text-muted-foreground">
-                      Chrome on macOS • Last active now
+                      {profile.email} &bull; Active now
                     </p>
                   </div>
                   <Badge variant="secondary">Active</Badge>
@@ -325,9 +387,7 @@ function SettingsContent() {
                   </div>
                   <Switch
                     checked={notifications.alertsEmail}
-                    onCheckedChange={(checked) =>
-                      setNotifications({ ...notifications, alertsEmail: checked })
-                    }
+                    onCheckedChange={handleToggleEmailAlerts}
                   />
                 </div>
                 <Separator />
@@ -403,10 +463,10 @@ function SettingsContent() {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-subtitle font-semibold capitalize">{userTier} Plan</span>
-                      {userTier === "pro" && <Badge>Current</Badge>}
+                      <Badge>Current</Badge>
                     </div>
                     <p className="text-caption text-muted-foreground">
-                      {userTier === "free" ? "Free forever" : "Next billing: Feb 5, 2026"}
+                      {userTier === "free" ? "Free forever" : "Manage via billing portal"}
                     </p>
                   </div>
                   <Button asChild>
@@ -442,7 +502,6 @@ function SettingsContent() {
                         variant={userTier === plan.id ? "secondary" : "outline"}
                         size="sm"
                         className="w-full"
-                        onClick={() => setUserTier(plan.id)}
                         disabled={userTier === plan.id}
                       >
                         {userTier === plan.id ? "Current Plan" : "Select"}

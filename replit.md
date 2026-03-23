@@ -94,6 +94,16 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - **Error handling**: all routes return `{ error: "..." }` on failure; UI shows graceful "unavailable" messages; 15-min React Query cache prevents excessive API calls
 - **Env secrets required**: `GEMINI_API_KEY`
 
+## Watchlist & Settings (Task #8 — COMPLETE)
+- **Watchlist**: moved from `localStorage` to Supabase `watchlist` table
+- **Hook**: `hooks/useWatchlist.ts` — `useWatchlist()` backed by Supabase; exposes `watchlistIds`, `toggleWatchlist`, `addToWatchlist`, `removeFromWatchlist`, `isWatched`; optimistic local state updates for instant UI response
+- **Pages wired**: `app/markets/page.tsx`, `app/watchlist/page.tsx`, `app/markets/[id]/page.tsx` — all use `useWatchlist()` instead of `localStorage`
+- **Settings page**: `app/settings/page.tsx` — profile seeded from real Supabase `profiles` row; "Save Changes" updates `profiles.name` via Supabase; email notification toggle persists `email_alerts_enabled` column
+- **Migration**: `supabase/migrations/003_watchlist.sql` — `public.watchlist` table with `(user_id, market_id)` unique constraint + RLS; also adds `email_alerts_enabled boolean default true` column to `profiles`; run in Supabase Dashboard SQL Editor before using watchlist
+- **Startup check**: `lib/supabase/migrate.ts` updated to also check for missing `watchlist` table and log migration URL
+- **Env secrets required**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- **DB migration**: Run `supabase/migrations/003_watchlist.sql` in Supabase Dashboard SQL Editor
+
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
 - **Build**: `pnpm run build`

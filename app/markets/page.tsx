@@ -31,30 +31,12 @@ import { useMarkets, MARKET_CATEGORIES, type MarketCategory, type TransformedMar
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import { AppHeader } from "@/components/AppHeader";
 import { PublicHeader } from "@/components/PublicHeader";
 import { MobileNav } from "@/components/MobileNav";
 
 const ITEMS_PER_PAGE = 12;
-
-// Local storage for watchlist
-function getWatchlist(): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem("polys-watchlist") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function toggleWatchlist(marketId: string): string[] {
-  const current = getWatchlist();
-  const updated = current.includes(marketId)
-    ? current.filter((id) => id !== marketId)
-    : [...current, marketId];
-  localStorage.setItem("polys-watchlist", JSON.stringify(updated));
-  return updated;
-}
 
 function MarketCard({ market, isWatched, onToggleWatch, index }: { 
   market: TransformedMarket; 
@@ -164,9 +146,10 @@ export default function MarketsPage() {
   const [sortBy, setSortBy] = useState("volume");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [currentPage, setCurrentPage] = useState(1);
-  const [watchlist, setWatchlist] = useState<string[]>(() => getWatchlist());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { toast } = useToast();
+
+  const { watchlistIds, toggleWatchlist, isWatched } = useWatchlist();
 
   // Fetch markets
   const { data: markets, isLoading, error } = useMarkets({
@@ -215,7 +198,6 @@ export default function MarketsPage() {
     // Sort
     switch (sortBy) {
       case "volume":
-        // Already sorted by volume from API
         break;
       case "newest":
         result.sort((a, b) => b.id.localeCompare(a.id));
@@ -238,41 +220,15 @@ export default function MarketsPage() {
     currentPage * ITEMS_PER_PAGE
   );
 
-  const handleToggleWatch = (marketId: string, marketName: string) => {
-    const updated = toggleWatchlist(marketId);
-    const isAdded = updated.includes(marketId);
-    setWatchlist(updated);
-    
-    // Show toast notification
+  const handleToggleWatch = async (market: TransformedMarket) => {
+    const added = await toggleWatchlist(market.id, market.name, market.category);
     toast({
-      title: isAdded ? "Added to watchlist" : "Removed from watchlist",
-      description: isAdded ? `"${marketName}" has been added to your watchlist` : `"${marketName}" has been removed from your watchlist`,
+      title: added ? "Added to watchlist" : "Removed from watchlist",
+      description: added
+        ? `"${market.name}" added to your watchlist`
+        : `"${market.name}" removed from your watchlist`,
     });
-    
-    // Dispatch storage event for cross-component sync
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'polys-watchlist',
-        newValue: JSON.stringify(updated),
-      }));
-    }
   };
-
-  // Listen for watchlist changes from other components/tabs
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'polys-watchlist' && e.newValue) {
-        try {
-          setWatchlist(JSON.parse(e.newValue));
-        } catch (error) {
-          console.error('Failed to parse watchlist from storage event', error);
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
 
   return (
     <>
@@ -396,10 +352,10 @@ export default function MarketsPage() {
             <span>
               Showing {paginatedMarkets.length} of {filteredMarkets.length} markets
             </span>
-            {watchlist.length > 0 && (
+            {watchlistIds.length > 0 && (
               <Link href="/watchlist" className="text-primary hover:underline flex items-center gap-1.5">
                 <Star weight="fill" className="h-4 w-4" />
-                Watchlist ({watchlist.length})
+                Watchlist ({watchlistIds.length})
               </Link>
             )}
           </div>
@@ -451,8 +407,8 @@ export default function MarketsPage() {
                 <MarketCard
                   key={market.id}
                   market={market}
-                  isWatched={watchlist.includes(market.id)}
-                  onToggleWatch={() => handleToggleWatch(market.id, market.name)}
+                  isWatched={isWatched(market.id)}
+                  onToggleWatch={() => handleToggleWatch(market)}
                   index={index}
                 />
               ))}
@@ -493,11 +449,11 @@ export default function MarketsPage() {
                     <button
                       onClick={(e) => {
                         e.preventDefault();
-                        handleToggleWatch(market.id, market.name);
+                        handleToggleWatch(market);
                       }}
                       className="text-muted-foreground hover:text-primary transition-colors"
                     >
-                      <Star weight={watchlist.includes(market.id) ? "fill" : "regular"} className={`h-4 w-4 ${watchlist.includes(market.id) ? "text-primary" : ""}`} />
+                      <Star weight={isWatched(market.id) ? "fill" : "regular"} className={`h-4 w-4 ${isWatched(market.id) ? "text-primary" : ""}`} />
                     </button>
                   </div>
                 </Link>

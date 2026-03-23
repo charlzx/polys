@@ -13,25 +13,25 @@ export async function runStartupMigration() {
 
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // Check if the alerts table exists
-  const { error } = await supabase.from("alerts").select("id").limit(1);
-
-  if (!error) {
-    // Table exists — nothing to do
-    return;
+  // Check alerts table
+  const { error: alertsError } = await supabase.from("alerts").select("id").limit(1);
+  if (alertsError?.code === "PGRST205") {
+    console.warn(
+      "[migrate] The 'alerts' table is missing from Supabase.\n" +
+      "Please run the migration SQL in your Supabase Dashboard:\n" +
+      "https://supabase.com/dashboard/project/wqeuoflqhacbmsktucac/sql/new\n" +
+      "File: supabase/migrations/002_alerts.sql"
+    );
   }
 
-  if (error.code !== "PGRST205") {
-    // Unexpected error — don't try to migrate
-    console.warn("[migrate] Unexpected error checking alerts table:", error.message);
-    return;
+  // Check watchlist table
+  const { error: watchlistError } = await supabase.from("watchlist").select("market_id").limit(1);
+  if (watchlistError?.code === "PGRST205") {
+    console.warn(
+      "[migrate] The 'watchlist' table is missing from Supabase.\n" +
+      "Please run the migration SQL in your Supabase Dashboard:\n" +
+      "https://supabase.com/dashboard/project/wqeuoflqhacbmsktucac/sql/new\n" +
+      "File: supabase/migrations/003_watchlist.sql"
+    );
   }
-
-  // Table doesn't exist — log instructions
-  console.warn(
-    "[migrate] The 'alerts' table is missing from Supabase.\n" +
-    "Please run the migration SQL in your Supabase Dashboard:\n" +
-    "https://supabase.com/dashboard/project/wqeuoflqhacbmsktucac/sql/new\n" +
-    "File: supabase/migrations/002_alerts.sql"
-  );
 }

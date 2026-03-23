@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,26 +19,8 @@ import { useMarkets, type TransformedMarket } from "@/services/polymarket";
 import { useWatchlistOneLiner, useWatchlistSuggestions } from "@/services/ai";
 import { motion } from "framer-motion";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import { AppHeader } from "@/components/AppHeader";
-
-// Local storage for watchlist
-function getWatchlist(): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem("polys-watchlist") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function toggleWatchlist(marketId: string): string[] {
-  const current = getWatchlist();
-  const updated = current.includes(marketId)
-    ? current.filter((id) => id !== marketId)
-    : [...current, marketId];
-  localStorage.setItem("polys-watchlist", JSON.stringify(updated));
-  return updated;
-}
 
 // One-liner AI summary for a single watchlist market card
 function AiOneLiner({ market }: { market: TransformedMarket }) {
@@ -236,21 +218,23 @@ function SuggestionsPanel({
 }
 
 export default function WatchlistPage() {
-  const [watchlist, setWatchlist] = useState<string[]>(() => getWatchlist());
   const { toast } = useToast();
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
+  const { watchlistIds, toggleWatchlist, addToWatchlist, isLoading: watchlistLoading } = useWatchlist();
 
   // Fetch markets
-  const { data: markets, isLoading } = useMarkets({
+  const { data: markets, isLoading: marketsLoading } = useMarkets({
     limit: 50,
     active: true,
   });
 
+  const isLoading = watchlistLoading || marketsLoading;
+
   // Filter markets to only show watchlisted ones
   const watchlistedMarkets = useMemo(() => {
     if (!markets) return [];
-    return markets.filter((m) => watchlist.includes(m.id));
-  }, [markets, watchlist]);
+    return markets.filter((m) => watchlistIds.includes(m.id));
+  }, [markets, watchlistIds]);
 
   // Derive top categories from watchlisted markets for smart suggestions
   const watchedCategories = useMemo(() => {
@@ -264,43 +248,23 @@ export default function WatchlistPage() {
       .map(([cat]) => cat);
   }, [watchlistedMarkets]);
 
-  const handleToggleWatch = (marketId: string, marketName: string) => {
-    const updated = toggleWatchlist(marketId);
-    const isAdded = updated.includes(marketId);
-    setWatchlist(updated);
-    
+  const handleToggleWatch = async (market: TransformedMarket) => {
+    const added = await toggleWatchlist(market.id, market.name, market.category);
     toast({
-      title: isAdded ? "Added to watchlist" : "Removed from watchlist",
-      description: isAdded ? `"${marketName}" has been added to your watchlist` : `"${marketName}" has been removed from your watchlist`,
+      title: added ? "Added to watchlist" : "Removed from watchlist",
+      description: added
+        ? `"${market.name}" added to your watchlist`
+        : `"${market.name}" removed from your watchlist`,
     });
-    
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'polys-watchlist',
-        newValue: JSON.stringify(updated),
-      }));
-    }
   };
 
   const handleAddSuggested = (market: TransformedMarket) => {
-    handleToggleWatch(market.id, market.name);
+    addToWatchlist(market.id, market.name, market.category);
+    toast({
+      title: "Added to watchlist",
+      description: `"${market.name}" added to your watchlist`,
+    });
   };
-
-  // Listen for watchlist changes from other components/tabs
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'polys-watchlist' && e.newValue) {
-        try {
-          setWatchlist(JSON.parse(e.newValue));
-        } catch (error) {
-          console.error('Failed to parse watchlist from storage event', error);
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
 
   if (!shouldShowContent) {
     return (
@@ -333,9 +297,9 @@ export default function WatchlistPage() {
               <h1 className="text-title md:text-display">Your Watchlist</h1>
             </div>
             <p className="text-muted-foreground">
-              {watchlist.length === 0 
+              {watchlistIds.length === 0 
                 ? "You haven't added any markets to your watchlist yet" 
-                : `Tracking ${watchlist.length} ${watchlist.length === 1 ? 'market' : 'markets'}`
+                : `Tracking ${watchlistIds.length} ${watchlistIds.length === 1 ? 'market' : 'markets'}`
               }
             </p>
           </motion.div>
@@ -370,7 +334,7 @@ export default function WatchlistPage() {
                 <MarketCard
                   key={market.id}
                   market={market}
-                  onToggleWatch={() => handleToggleWatch(market.id, market.name)}
+                  onToggleWatch={() => handleToggleWatch(market)}
                   index={index}
                 />
               ))}
@@ -381,7 +345,7 @@ export default function WatchlistPage() {
           {!isLoading && watchlistedMarkets.length > 0 && markets && (
             <SuggestionsPanel
               categories={watchedCategories}
-              watchedIds={watchlist}
+              watchedIds={watchlistIds}
               allMarkets={markets}
               onAdd={handleAddSuggested}
             />

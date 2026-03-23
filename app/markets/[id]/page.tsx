@@ -27,6 +27,7 @@ import { useMarketSummary, type MarketSummary } from "@/services/ai";
 import { useSingleMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import type { LiveTrade } from "@/hooks/useMarketWebSocket";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import { AppHeader } from "@/components/AppHeader";
 import {
   XAxis,
@@ -233,31 +234,12 @@ function AiAnalysisPanel({
   );
 }
 
-// Local storage for watchlist
-function getWatchlist(): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem("polys-watchlist") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function toggleWatchlist(marketId: string): string[] {
-  const current = getWatchlist();
-  const updated = current.includes(marketId)
-    ? current.filter((id) => id !== marketId)
-    : [...current, marketId];
-  localStorage.setItem("polys-watchlist", JSON.stringify(updated));
-  return updated;
-}
-
 export default function MarketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: market, isLoading, error } = useMarket(id);
   const [timeframe, setTimeframe] = useState("30D");
-  const [isWatched, setIsWatched] = useState(() => getWatchlist().includes(id));
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
+  const { isWatched, toggleWatchlist } = useWatchlist();
 
   // Live WebSocket data (real CLOB connection when yesTokenId available)
   const { currentOdds, lastUpdate, volatility, momentum, liveOrderBook, liveTrades, feedError } = useSingleMarketWebSocket(
@@ -400,19 +382,13 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
               variant="outline"
               size="sm"
               onClick={() => {
-                toggleWatchlist(id);
-                setIsWatched(!isWatched);
-                // Dispatch storage event for cross-component sync
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'polys-watchlist',
-                    newValue: JSON.stringify(getWatchlist()),
-                  }));
+                if (market) {
+                  toggleWatchlist(id, market.name, market.category);
                 }
               }}
             >
-              <Star className={`h-4 w-4 mr-2 ${isWatched ? "fill-primary text-primary" : ""}`} weight={isWatched ? "fill" : "regular"} />
-              {isWatched ? "Watching" : "Watch"}
+              <Star className={`h-4 w-4 mr-2 ${isWatched(id) ? "fill-primary text-primary" : ""}`} weight={isWatched(id) ? "fill" : "regular"} />
+              {isWatched(id) ? "Watching" : "Watch"}
             </Button>
             <Button variant="outline" size="sm">
               <ShareNetwork className="h-4 w-4 mr-2" />
