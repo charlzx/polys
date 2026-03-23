@@ -9,6 +9,7 @@ export interface TransformedMarket {
   name: string;
   description: string;
   category: string;
+  tags: string[];
   yesOdds: number;
   noOdds: number;
   change24h: number;
@@ -207,11 +208,14 @@ function transformMarket(raw: GammaMarket): TransformedMarket {
   const volume24h = raw.volume24hr;
   const liquidity = raw.liquidityNum !== undefined ? raw.liquidityNum : raw.liquidity;
 
+  const tags = (raw.tags ?? []).map((t) => t.label).filter(Boolean);
+
   return {
     id: raw.id,
     name: raw.question || "Unknown Market",
     description: raw.description || "",
     category: deriveCategory(raw),
+    tags,
     yesOdds,
     noOdds,
     change24h,

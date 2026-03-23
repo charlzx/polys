@@ -413,10 +413,10 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
     return realHistory && realHistory.length > 0 ? realHistory : [];
   }, [market, realHistory]);
 
-  // Related news coverage
+  // Related news coverage — pass market question + tags for targeted search
   const { guardian: guardianArticles, reddit: redditPosts, isLoading: newsLoading } = useMarketNews(
     market?.name,
-    undefined
+    market?.tags
   );
 
   // Show loading while checking auth

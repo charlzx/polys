@@ -55,6 +55,7 @@ async function fetchPolymarketServer(): Promise<TransformedMarket[]> {
       name: m.question,
       description: "",
       category: "General",
+      tags: [],
       yesOdds,
       noOdds: 100 - yesOdds,
       change24h: 0,
