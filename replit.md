@@ -128,6 +128,24 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
   - Each ticker item links to the market detail page
 - **Cleanup**: `data/predictions.ts` deleted entirely (no remaining importers)
 
+## Kalshi Markets Browser (Task #11 — COMPLETE)
+- **API route** (`app/api/kalshi/route.ts`): New GET route wrapping `fetchKalshiEventsServer()`;
+  supports `limit`, `category`, and `search` query params; returns `{ markets, total }`
+- **Hook** (`hooks/useKalshiMarkets.ts`): Client-side hook fetching `/api/kalshi`; exposes
+  `markets`, `isLoading`, `error`, and `reload`
+- **Page** (`app/kalshi/page.tsx`): Full market browser with:
+  - Search by keyword (event title / market title)
+  - Category filter — raw Kalshi slugs mapped to human labels (Politics, Economics, Crypto, etc.)
+  - Sort by: Highest Volume, Highest YES Odds, Highest NO Odds
+  - Market cards showing: category badge, market title, YES% / NO% odds, volume, YES progress bar
+  - "Trade on Kalshi" button linking to kalshi.com for each market
+  - Paginated grid (12 per page) with loading skeletons and empty/error states
+  - "200 live" badge in header when loaded
+- **Navigation**:
+  - Desktop header (`components/AppHeader.tsx`): "Kalshi" tab added between Markets and Whales; uses `ChartBar` icon
+  - Mobile bottom nav (`components/MobileBottomNav.tsx`): "Kalshi" replaces "Arbitrage" (premium);
+    uses `ChartBar` icon; 6-item layout maintained
+
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
 - **Build**: `pnpm run build`
