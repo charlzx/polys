@@ -21,6 +21,8 @@ import {
   Broadcast,
   ChartBar,
   ChartLine,
+  Newspaper,
+  ArrowUpRight,
 } from "@phosphor-icons/react";
 import { useMarket, usePriceHistory, useOrderbook } from "@/services/polymarket";
 import { useMarketSummary, type MarketSummary } from "@/services/ai";
@@ -28,6 +30,7 @@ import { useSingleMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import type { LiveTrade } from "@/hooks/useMarketWebSocket";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useWatchlist } from "@/hooks/useWatchlist";
+import { useMarketNews, type GuardianArticle, type RedditPost } from "@/hooks/useMarketNews";
 import { AppHeader } from "@/components/AppHeader";
 import {
   XAxis,
@@ -234,6 +237,135 @@ function AiAnalysisPanel({
   );
 }
 
+// Related news coverage section
+function RelatedCoverage({
+  guardian,
+  reddit,
+  isLoading,
+}: {
+  guardian: GuardianArticle[];
+  reddit: RedditPost[];
+  isLoading: boolean;
+}) {
+  const hasResults = guardian.length > 0 || reddit.length > 0;
+
+  if (!isLoading && !hasResults) return null;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 pb-3">
+        <Newspaper className="h-4 w-4 text-primary" />
+        <CardTitle className="text-subtitle">Related Coverage</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex gap-3">
+                <Skeleton className="h-12 w-12 rounded flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-3/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {guardian.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-caption text-muted-foreground font-medium uppercase tracking-wide">
+                  News
+                </div>
+                <div className="space-y-2">
+                  {guardian.map((article, i) => (
+                    <a
+                      key={i}
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex gap-3 group hover:bg-secondary/50 rounded-md p-2 -mx-2 transition-colors"
+                    >
+                      {article.thumbnail ? (
+                        <img
+                          src={article.thumbnail}
+                          alt=""
+                          className="h-12 w-12 rounded object-cover flex-shrink-0 bg-secondary"
+                        />
+                      ) : (
+                        <div className="h-12 w-12 rounded bg-secondary flex items-center justify-center flex-shrink-0">
+                          <Newspaper className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-small font-medium line-clamp-2 group-hover:text-primary transition-colors">
+                          {article.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-caption text-muted-foreground">{article.section}</span>
+                          <span className="text-caption text-muted-foreground">·</span>
+                          <span className="text-caption text-muted-foreground">
+                            {new Date(article.publishedAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 flex-shrink-0 mt-1 transition-opacity" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reddit.length > 0 && (
+              <div className="space-y-2">
+                {guardian.length > 0 && <div className="border-t border-border" />}
+                <div className="text-caption text-muted-foreground font-medium uppercase tracking-wide">
+                  Reddit
+                </div>
+                <div className="space-y-1">
+                  {reddit.map((post, i) => (
+                    <a
+                      key={i}
+                      href={post.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-start gap-2 group hover:bg-secondary/50 rounded-md p-2 -mx-2 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-small font-medium line-clamp-2 group-hover:text-primary transition-colors">
+                          {post.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="secondary" className="text-caption px-1.5 py-0">
+                            r/{post.subreddit}
+                          </Badge>
+                          <span className="text-caption text-muted-foreground">
+                            {post.score >= 1000
+                              ? `${(post.score / 1000).toFixed(1)}k`
+                              : post.score} upvotes
+                          </span>
+                          <span className="text-caption text-muted-foreground">·</span>
+                          <span className="text-caption text-muted-foreground">
+                            {post.numComments} comments
+                          </span>
+                        </div>
+                      </div>
+                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 flex-shrink-0 mt-1 transition-opacity" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function MarketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: market, isLoading, error } = useMarket(id);
@@ -280,6 +412,12 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
     if (!market) return [];
     return realHistory && realHistory.length > 0 ? realHistory : [];
   }, [market, realHistory]);
+
+  // Related news coverage
+  const { guardian: guardianArticles, reddit: redditPosts, isLoading: newsLoading } = useMarketNews(
+    market?.name,
+    undefined
+  );
 
   // Show loading while checking auth
   if (!shouldShowContent) {
@@ -637,6 +775,13 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                 </Card>
               </TabsContent>
             </Tabs>
+
+            {/* Related News Coverage */}
+            <RelatedCoverage
+              guardian={guardianArticles}
+              reddit={redditPosts}
+              isLoading={newsLoading}
+            />
           </div>
 
           {/* Sidebar */}
