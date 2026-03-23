@@ -1,19 +1,7 @@
 import { NextResponse } from "next/server";
 
 const DATA_API = "https://data-api.polymarket.com";
-
-const TRACKED_WALLETS = [
-  "0x8BD6C3D7a57D650A1870dd338234f90051fe9918",
-  "0x3d3dB3BeE80414717e3C66c341EF95eCc9BDDBaB",
-  "0x01a4333b6aCb5091cF0219646f35E289546F4656",
-  "0x13064324dFF1e76062975345d255EFccc6C78bd0",
-  "0x4d96190E8D0487d019987Cd9dF34dD51f617037F",
-  "0xe7C33D231C3cc668457dE4F15AD398E2B8ECa8D7",
-  "0x365E12B47919b0E3BCF1c8CC3Ecd8FB88b80560F",
-  "0xD4D7c117645A85bCbe39Bfe9d8847628F75734b0",
-  "0xEb70cbb241d2947aa2c145B9F8F9dd97309e54B7",
-  "0x5a91461432cC131871beBb7adacE6523b95fEB51",
-];
+const GAMMA_API = "https://gamma-api.polymarket.com";
 
 const TRADE_SIZE_THRESHOLD = 1000; // $1k minimum for whale activity
 
@@ -23,6 +11,27 @@ function safeNum(v: unknown): number {
   if (v === null || v === undefined || v === "") return 0;
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
   return isNaN(n) ? 0 : n;
+}
+
+// Discover Polymarket-associated wallet addresses from Gamma API market data.
+// Returns the unique set of marketMakerAddress values from top-volume markets.
+async function discoverWallets(): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `${GAMMA_API}/markets?active=true&limit=100&order=volume&ascending=false`
+    );
+    if (!res.ok) return [];
+    const markets = (await res.json()) as Array<Record<string, unknown>>;
+    return [
+      ...new Set(
+        markets
+          .map((m) => String(m.marketMakerAddress ?? ""))
+          .filter((a) => a && a !== "0x0000000000000000000000000000000000000000")
+      ),
+    ].slice(0, 20);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchWalletActivity(
@@ -38,16 +47,28 @@ async function fetchWalletActivity(
   }
 }
 
+type ActivityItem = {
+  id: string;
+  proxyWallet: string;
+  title: string;
+  side: string;
+  outcome: string;
+  amount: number;
+  price: number;
+  timestamp: string;
+};
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address");
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
+  const threshold = safeNum(searchParams.get("threshold") ?? String(TRADE_SIZE_THRESHOLD));
 
   // If a single address is given, return that wallet's activity
   if (address) {
     const items = await fetchWalletActivity(address);
-    const activity = items
-      .filter((a) => Math.abs(safeNum(a.usdcSize ?? a.amount)) >= TRADE_SIZE_THRESHOLD)
+    const activity: ActivityItem[] = items
+      .filter((a) => Math.abs(safeNum(a.usdcSize ?? a.amount)) >= threshold)
       .map((a) => ({
         id: String(a.id ?? `${Date.now()}-${Math.random()}`),
         proxyWallet: address,
@@ -61,13 +82,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ activity, source: "user" });
   }
 
-  // Default: aggregate large trades from all tracked wallets
+  // Default: discover wallets from Gamma API, then aggregate large trades
+  const wallets = await discoverWallets();
+  if (wallets.length === 0) {
+    return NextResponse.json({ activity: [], source: "no_wallets_discovered" });
+  }
+
   const allActivity = await Promise.allSettled(
-    TRACKED_WALLETS.map(async (addr) => {
+    wallets.map(async (addr) => {
       const items = await fetchWalletActivity(addr);
       return items
-        .filter((a) => Math.abs(safeNum(a.usdcSize ?? a.amount)) >= TRADE_SIZE_THRESHOLD)
-        .map((a) => ({
+        .filter((a) => Math.abs(safeNum(a.usdcSize ?? a.amount)) >= threshold)
+        .map((a): ActivityItem => ({
           id: String(a.id ?? `${addr}-${Date.now()}-${Math.random()}`),
           proxyWallet: addr,
           title: String(a.title ?? a.question ?? ""),
@@ -80,10 +106,6 @@ export async function GET(request: Request) {
     })
   );
 
-  type ActivityItem = {
-    id: string; proxyWallet: string; title: string; side: string;
-    outcome: string; amount: number; price: number; timestamp: string;
-  };
   const flatActivity: ActivityItem[] = allActivity
     .filter((r) => r.status === "fulfilled")
     .flatMap((r) => (r as PromiseFulfilledResult<ActivityItem[]>).value)
@@ -94,5 +116,9 @@ export async function GET(request: Request) {
     )
     .slice(0, limit);
 
-  return NextResponse.json({ activity: flatActivity, source: "wallets" });
+  return NextResponse.json({
+    activity: flatActivity,
+    source: "gamma_market_makers",
+    discovered: wallets.length,
+  });
 }

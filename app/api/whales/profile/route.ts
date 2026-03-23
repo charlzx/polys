@@ -37,21 +37,24 @@ export async function GET(request: Request) {
 
     if (posRes.status === "fulfilled" && posRes.value.ok) {
       const raw = await posRes.value.json();
-      positions = (Array.isArray(raw) ? raw : []).map((p: Record<string, unknown>) => ({
-        conditionId: p.conditionId ?? p.market ?? "",
-        market: p.market ?? "",
-        question: p.title ?? p.question ?? "",
-        outcome: p.outcome ?? "YES",
-        outcomeIndex: p.outcomeIndex ?? 0,
-        size: safeNum(p.size),
-        avgPrice: safeNum(p.avgPrice),
-        initialValue: safeNum(p.initialValue),
-        currentValue: safeNum(p.currentValue),
-        cashPnl: safeNum(p.cashPnl),
-        percentPnl: safeNum(p.percentPnl),
-        endDate: p.endDate ?? null,
-        image: p.image ?? p.icon ?? null,
-      }));
+      positions = (Array.isArray(raw) ? raw : [])
+        // Only include positions with remaining shares (size > 0 means still open)
+        .filter((p: Record<string, unknown>) => safeNum(p.size) > 0)
+        .map((p: Record<string, unknown>) => ({
+          conditionId: p.conditionId ?? p.market ?? "",
+          market: p.market ?? "",
+          question: p.title ?? p.question ?? "",
+          outcome: p.outcome ?? "YES",
+          outcomeIndex: p.outcomeIndex ?? 0,
+          size: safeNum(p.size),
+          avgPrice: safeNum(p.avgPrice),
+          initialValue: safeNum(p.initialValue),
+          currentValue: safeNum(p.currentValue),
+          cashPnl: safeNum(p.cashPnl),
+          percentPnl: safeNum(p.percentPnl),
+          endDate: p.endDate ?? null,
+          image: p.image ?? p.icon ?? null,
+        }));
     }
 
     if (actRes.status === "fulfilled" && actRes.value.ok) {
