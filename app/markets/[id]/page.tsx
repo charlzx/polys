@@ -23,6 +23,7 @@ import {
   ChartLine,
 } from "@phosphor-icons/react";
 import { useMarket, usePriceHistory, useOrderbook } from "@/services/polymarket";
+import { useMarketSummary, type MarketSummary } from "@/services/ai";
 import { useSingleMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import type { LiveTrade } from "@/hooks/useMarketWebSocket";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -150,6 +151,88 @@ function OrderBookChart({ bids, asks, maxTotal }: {
   );
 }
 
+// AI Analysis collapsible panel
+function AiAnalysisPanel({
+  isLoading,
+  summary,
+  error,
+}: {
+  isLoading: boolean;
+  summary: MarketSummary | null;
+  error: string | null;
+}) {
+  const [open, setOpen] = useState(true);
+
+  const sentimentColor: Record<string, string> = {
+    "Bullish": "text-success",
+    "Highly Bullish": "text-success",
+    "Bearish": "text-destructive",
+    "Highly Bearish": "text-destructive",
+    "Neutral": "text-muted-foreground",
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        className="flex flex-row items-center justify-between pb-2 cursor-pointer"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <div className="flex items-center gap-2">
+          <Sparkle className="h-4 w-4 text-primary" weight="fill" />
+          <CardTitle className="text-subtitle">AI Analysis</CardTitle>
+        </div>
+        <ChartLine
+          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-0" : "-rotate-90"}`}
+        />
+      </CardHeader>
+
+      {open && (
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-5/6" />
+              <Skeleton className="h-3 w-4/5" />
+              <Skeleton className="h-3 w-full" />
+            </div>
+          ) : error ? (
+            <p className="text-small text-muted-foreground">AI analysis unavailable.</p>
+          ) : summary ? (
+            <>
+              <div>
+                <div className="text-caption text-muted-foreground mb-1">Sentiment</div>
+                <div className={`text-small font-semibold ${sentimentColor[summary.sentiment] ?? ""}`}>
+                  {summary.sentiment}
+                </div>
+              </div>
+              <div>
+                <div className="text-caption text-muted-foreground mb-1">Price Movement</div>
+                <p className="text-small">{summary.priceMovementInsight}</p>
+              </div>
+              <div>
+                <div className="text-caption text-muted-foreground mb-1">Risk Factors</div>
+                <ul className="space-y-1">
+                  {summary.riskFactors.map((r, i) => (
+                    <li key={i} className="text-small text-muted-foreground flex gap-2">
+                      <span className="text-destructive mt-0.5">•</span>
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="border-t border-border pt-3">
+                <div className="text-caption text-muted-foreground mb-1">Calibrated Assessment</div>
+                <p className="text-small">{summary.probabilityAssessment}</p>
+              </div>
+            </>
+          ) : null}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 // Local storage for watchlist
 function getWatchlist(): string[] {
   if (typeof window === 'undefined') return [];
@@ -202,6 +285,9 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
 
   // Fetch real price history from CLOB API
   const { data: realHistory } = usePriceHistory(market?.yesTokenId, timeframe);
+
+  // AI market summary
+  const { data: aiSummary, isLoading: aiLoading, error: aiError } = useMarketSummary(market?.id);
 
   // Fetch real order book from CLOB REST API; prefer live WebSocket snapshot
   const { data: restOrderBook } = useOrderbook(market?.yesTokenId);
@@ -620,36 +706,12 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
               </CardContent>
             </Card>
 
-            {/* AI Insights (Pro feature) */}
-            <Card className="relative overflow-hidden">
-              <CardHeader className="flex flex-row items-center gap-2 pb-2">
-                <Sparkle className="h-4 w-4 text-primary" />
-                <CardTitle className="text-subtitle">AI Insight</CardTitle>
-                <Badge variant="secondary" className="ml-auto">Professional</Badge>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 filter blur-sm">
-                  <p className="text-small text-muted-foreground">
-                    This market&apos;s odds ({displayYesOdds}%) diverge from our model estimate (47%). 
-                    Historical patterns suggest potential value opportunity.
-                  </p>
-                  <div className="flex items-center justify-between text-small">
-                    <span className="text-muted-foreground">Model Confidence</span>
-                    <span className="font-semibold">68%</span>
-                  </div>
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-[2px]">
-                  <div className="text-center p-4">
-                    <p className="text-small font-medium mb-2">
-                      Upgrade to Professional for AI insights
-                    </p>
-                    <Button size="sm" asChild>
-                      <Link href="/pricing">Upgrade</Link>
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* AI Analysis panel */}
+            <AiAnalysisPanel
+              isLoading={aiLoading}
+              summary={aiSummary ?? null}
+              error={aiError ? String(aiError) : null}
+            />
           </div>
         </div>
       </div>

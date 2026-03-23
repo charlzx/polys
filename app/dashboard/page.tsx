@@ -24,6 +24,8 @@ import { recentAlerts } from "@/data/alerts";
 import { useMarkets } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import { WhaleActivityFeed } from "@/components/WhaleActivityFeed";
+import { useMarketIntelligence } from "@/services/ai";
+import { Sparkle } from "@phosphor-icons/react";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -239,6 +241,10 @@ export default function DashboardPage() {
   const liveMarkets = useMemo(
     () => (markets ? applyUpdatesToMarkets(markets) : []),
     [markets, applyUpdatesToMarkets]
+  );
+
+  const { data: intelligence, isLoading: intelligenceLoading } = useMarketIntelligence(
+    liveMarkets.slice(0, 10)
   );
 
   if (!shouldShowContent) {
@@ -458,6 +464,56 @@ export default function DashboardPage() {
                       </Button>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Market Intelligence widget */}
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2 p-4 md:p-5 pb-3">
+                  <Sparkle className="h-4 w-4 text-primary" weight="fill" />
+                  <CardTitle className="text-subtitle">Market Intelligence</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 md:p-5 pt-0">
+                  {intelligenceLoading ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="space-y-1.5">
+                          <Skeleton className="h-3 w-full" />
+                          <Skeleton className="h-3 w-4/5" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : intelligence && intelligence.length > 0 ? (
+                    <div className="space-y-3">
+                      {intelligence.slice(0, 3).map((item) => (
+                        <div key={item.marketId} className="p-3 rounded-lg bg-secondary/50 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge
+                              variant="secondary"
+                              className={`text-caption px-2 py-0.5 ${
+                                item.signal === "bullish"
+                                  ? "text-success"
+                                  : item.signal === "bearish"
+                                  ? "text-destructive"
+                                  : ""
+                              }`}
+                            >
+                              {item.signal}
+                            </Badge>
+                            <Badge variant="outline" className="text-caption px-2 py-0.5">
+                              {item.category}
+                            </Badge>
+                          </div>
+                          <p className="text-small font-medium line-clamp-1">{item.marketName}</p>
+                          <p className="text-caption text-muted-foreground line-clamp-2">{item.insight}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-small text-muted-foreground">
+                      Loading market intelligence…
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 

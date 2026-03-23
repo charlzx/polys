@@ -77,6 +77,23 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - **Env secrets required**: `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`
 - **DB migration**: Run `supabase/migrations/002_alerts.sql` in Supabase Dashboard SQL Editor before using alerts
 
+## AI Market Intelligence (Task #6 — COMPLETE)
+- **AI provider**: Google Gemini (`@google/generative-ai` package); model `gemini-2.0-flash`; key in `GEMINI_API_KEY` secret
+- **Service layer**: `services/ai.ts` — typed functions + React Query hooks with 15-minute `staleTime` cache:
+  - `useMarketSummary(marketId)` → market detail AI Analysis panel
+  - `useMarketIntelligence(markets[])` → dashboard Market Intelligence widget (top 3 flagged opportunities)
+  - `useWatchlistOneLiner(market)` → watchlist per-card one-line AI summary
+  - `useWatchlistSuggestions(categories, seenIds, allMarkets)` → smart watchlist suggestions
+- **API routes** (all server-side; API key never exposed to client):
+  - `GET /api/ai/market-summary?marketId=<id>&mode=full|oneliner` — full analysis or one-liner
+  - `POST /api/ai/intelligence` — top 3 flagged opportunities from market list
+  - `POST /api/ai/suggestions` — category-based unseen market recommendations
+- **Market detail page**: collapsible "AI Analysis" panel in sidebar — shows sentiment, price movement insight, risk factors, calibrated assessment; loading skeleton while fetching
+- **Dashboard**: "Market Intelligence" widget shows top 3 AI-flagged markets with signal (bullish/bearish/neutral), category badge, and insight
+- **Watchlist**: each watched market card shows an AI one-liner summary (with sparkle icon); "Suggested for You" panel at bottom recommends unseen markets in the user's preferred categories
+- **Error handling**: all routes return `{ error: "..." }` on failure; UI shows graceful "unavailable" messages; 15-min React Query cache prevents excessive API calls
+- **Env secrets required**: `GEMINI_API_KEY`
+
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
 - **Build**: `pnpm run build`

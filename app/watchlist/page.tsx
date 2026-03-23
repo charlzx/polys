@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,8 +13,10 @@ import {
   TrendDownIcon,
   ArrowUpRight,
   ArrowLeft,
+  Sparkle,
 } from "@phosphor-icons/react";
 import { useMarkets, type TransformedMarket } from "@/services/polymarket";
+import { useWatchlistOneLiner, useWatchlistSuggestions } from "@/services/ai";
 import { motion } from "framer-motion";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { AppHeader } from "@/components/AppHeader";
@@ -36,6 +38,22 @@ function toggleWatchlist(marketId: string): string[] {
     : [...current, marketId];
   localStorage.setItem("polys-watchlist", JSON.stringify(updated));
   return updated;
+}
+
+// One-liner AI summary for a single watchlist market card
+function AiOneLiner({ market }: { market: TransformedMarket }) {
+  const { data: oneLiner, isLoading } = useWatchlistOneLiner(market);
+
+  if (isLoading) {
+    return <Skeleton className="h-3 w-full mt-2" />;
+  }
+  if (!oneLiner) return null;
+  return (
+    <p className="text-caption text-muted-foreground mt-2 italic line-clamp-2 flex items-start gap-1">
+      <Sparkle className="h-3 w-3 text-primary shrink-0 mt-0.5" weight="fill" />
+      {oneLiner}
+    </p>
+  );
 }
 
 function MarketCard({ market, onToggleWatch, index }: { 
@@ -99,13 +117,16 @@ function MarketCard({ market, onToggleWatch, index }: {
           </div>
 
           {/* Stats */}
-          <div className="flex items-center justify-between text-caption text-muted-foreground mb-4">
+          <div className="flex items-center justify-between text-caption text-muted-foreground mb-3">
             <span>Vol: {market.volume}</span>
             <span>Liq: {market.liquidity}</span>
           </div>
 
+          {/* AI one-liner */}
+          <AiOneLiner market={market} />
+
           {/* Action Button */}
-          <Link href={`/markets/${market.id}`} className="block">
+          <Link href={`/markets/${market.id}`} className="block mt-3">
             <Button 
               variant="secondary" 
               size="sm" 
@@ -138,9 +159,84 @@ function MarketSkeleton() {
   );
 }
 
+// Smart suggestions panel
+function SuggestionsPanel({
+  categories,
+  watchedIds,
+  allMarkets,
+  onAdd,
+}: {
+  categories: string[];
+  watchedIds: string[];
+  allMarkets: TransformedMarket[];
+  onAdd: (market: TransformedMarket) => void;
+}) {
+  const { data: suggestions, isLoading } = useWatchlistSuggestions(
+    categories,
+    watchedIds,
+    allMarkets
+  );
+
+  // Map suggestions back to full market objects
+  const suggestedMarkets = useMemo(() => {
+    if (!suggestions) return [];
+    return suggestions
+      .map((s) => {
+        const m = allMarkets.find((m) => m.id === s.marketId);
+        return m ? { market: m, reason: s.reason } : null;
+      })
+      .filter(Boolean) as { market: TransformedMarket; reason: string }[];
+  }, [suggestions, allMarkets]);
+
+  if (categories.length === 0 || (suggestedMarkets.length === 0 && !isLoading)) return null;
+
+  return (
+    <Card className="border-primary/20">
+      <CardHeader className="flex flex-row items-center gap-2 pb-3">
+        <Sparkle className="h-4 w-4 text-primary" weight="fill" />
+        <CardTitle className="text-subtitle">Suggested for You</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="space-y-1.5">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {suggestedMarkets.map(({ market, reason }) => (
+              <div
+                key={market.id}
+                className="flex items-start justify-between gap-3 p-3 rounded-lg bg-secondary/50"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-small font-medium line-clamp-1">{market.name}</p>
+                  <p className="text-caption text-muted-foreground mt-0.5 line-clamp-2">{reason}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 h-8"
+                  onClick={() => onAdd(market)}
+                >
+                  <Star className="h-3 w-3 mr-1" />
+                  Watch
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState<string[]>(() => getWatchlist());
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { toast } = useToast();
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
 
@@ -156,24 +252,38 @@ export default function WatchlistPage() {
     return markets.filter((m) => watchlist.includes(m.id));
   }, [markets, watchlist]);
 
+  // Derive top categories from watchlisted markets for smart suggestions
+  const watchedCategories = useMemo(() => {
+    const counts: Record<string, number> = {};
+    watchlistedMarkets.forEach((m) => {
+      counts[m.category] = (counts[m.category] ?? 0) + 1;
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([cat]) => cat);
+  }, [watchlistedMarkets]);
+
   const handleToggleWatch = (marketId: string, marketName: string) => {
     const updated = toggleWatchlist(marketId);
     const isAdded = updated.includes(marketId);
     setWatchlist(updated);
     
-    // Show toast notification
     toast({
       title: isAdded ? "Added to watchlist" : "Removed from watchlist",
       description: isAdded ? `"${marketName}" has been added to your watchlist` : `"${marketName}" has been removed from your watchlist`,
     });
     
-    // Dispatch storage event for cross-component sync
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new StorageEvent('storage', {
         key: 'polys-watchlist',
         newValue: JSON.stringify(updated),
       }));
     }
+  };
+
+  const handleAddSuggested = (market: TransformedMarket) => {
+    handleToggleWatch(market.id, market.name);
   };
 
   // Listen for watchlist changes from other components/tabs
@@ -192,7 +302,6 @@ export default function WatchlistPage() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // Show loading while checking auth
   if (!shouldShowContent) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -266,6 +375,16 @@ export default function WatchlistPage() {
                 />
               ))}
             </div>
+          )}
+
+          {/* Smart Suggestions */}
+          {!isLoading && watchlistedMarkets.length > 0 && markets && (
+            <SuggestionsPanel
+              categories={watchedCategories}
+              watchedIds={watchlist}
+              allMarkets={markets}
+              onAdd={handleAddSuggested}
+            />
           )}
         </div>
         </div>
