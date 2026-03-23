@@ -1,30 +1,40 @@
 import { NextResponse } from "next/server";
 
 const DATA_API = "https://data-api.polymarket.com";
-
-// Seed list of known Polymarket proxy wallet addresses for the leaderboard.
-// The feature gracefully handles addresses with no on-chain data.
-const TRACKED_WALLETS = [
-  "0x8BD6C3D7a57D650A1870dd338234f90051fe9918",
-  "0x3d3dB3BeE80414717e3C66c341EF95eCc9BDDBaB",
-  "0x01a4333b6aCb5091cF0219646f35E289546F4656",
-  "0x13064324dFF1e76062975345d255EFccc6C78bd0",
-  "0x4d96190E8D0487d019987Cd9dF34dD51f617037F",
-  "0xe7C33D231C3cc668457dE4F15AD398E2B8ECa8D7",
-  "0x365E12B47919b0E3BCF1c8CC3Ecd8FB88b80560F",
-  "0xD4D7c117645A85bCbe39Bfe9d8847628F75734b0",
-  "0xEb70cbb241d2947aa2c145B9F8F9dd97309e54B7",
-  "0x5a91461432cC131871beBb7adacE6523b95fEB51",
-];
+const GAMMA_API = "https://gamma-api.polymarket.com";
 
 export const runtime = "edge";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+// Maximum wallets to profile after discovery (edge timeout guard)
+const MAX_PROFILE = 20;
 
 function safeNum(v: unknown): number {
   if (v === null || v === undefined || v === "") return 0;
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
   return isNaN(n) ? 0 : n;
+}
+
+// Dynamically discover Polymarket-associated wallet addresses from Gamma API
+// market maker contracts, then filter to those with actual on-chain activity.
+async function discoverWallets(): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `${GAMMA_API}/markets?active=true&limit=100&order=volume&ascending=false`
+    );
+    if (!res.ok) return [];
+    const markets = (await res.json()) as Array<Record<string, unknown>>;
+    const addresses = [
+      ...new Set(
+        markets
+          .map((m) => String(m.marketMakerAddress ?? ""))
+          .filter((a) => a && a !== "0x0000000000000000000000000000000000000000")
+      ),
+    ];
+    return addresses.slice(0, MAX_PROFILE);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchWalletData(address: string) {
@@ -108,8 +118,15 @@ export async function GET(request: Request) {
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "10"), 20);
 
   try {
-    // Fetch ALL tracked wallets, then rank, then slice to limit
-    const results = await Promise.allSettled(TRACKED_WALLETS.map(fetchWalletData));
+    // Discover wallets dynamically from Gamma API market data
+    const wallets = await discoverWallets();
+
+    if (wallets.length === 0) {
+      return NextResponse.json({ whales: [], source: "no_wallets_discovered" });
+    }
+
+    // Fetch ALL discovered wallets in parallel, then rank, then slice to limit
+    const results = await Promise.allSettled(wallets.map(fetchWalletData));
 
     const whales = results
       .filter(
@@ -123,10 +140,10 @@ export async function GET(request: Request) {
         if (!a.hasData && b.hasData) return 1;
         return b.totalVolume - a.totalVolume;
       })
-      // Apply limit AFTER ranking the full universe
+      // Apply limit AFTER ranking the full discovered universe
       .slice(0, limit);
 
-    return NextResponse.json({ whales });
+    return NextResponse.json({ whales, source: "gamma_market_makers", discovered: wallets.length });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

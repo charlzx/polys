@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { AppHeader } from "@/components/AppHeader";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useAuth } from "@/hooks/useAuth";
 import { shortAddress, formatDollar } from "@/services/whales";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -158,9 +159,15 @@ function ActivityItem({ item }: { item: WhaleActivityItem }) {
   );
 }
 
+// Free users see a capped preview; pro/premium see full profile
+const FREE_POSITION_LIMIT = 3;
+const FREE_ACTIVITY_LIMIT = 5;
+
 export default function WhalePage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = use(params);
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
+  const { user } = useAuth();
+  const isPro = user?.tier === "pro" || user?.tier === "premium";
 
   const { data, isLoading, isError } = useQuery<WhaleProfileData>({
     queryKey: ["whale-profile-page", address],
@@ -178,8 +185,15 @@ export default function WhalePage({ params }: { params: Promise<{ address: strin
     );
   }
 
-  const hasPositions = (data?.positions?.length ?? 0) > 0;
-  const hasActivity = (data?.activity?.length ?? 0) > 0;
+  const allPositions = data?.positions ?? [];
+  const allActivity = data?.activity ?? [];
+  const visiblePositions = isPro ? allPositions : allPositions.slice(0, FREE_POSITION_LIMIT);
+  const visibleActivity = isPro ? allActivity : allActivity.slice(0, FREE_ACTIVITY_LIMIT);
+  const positionsCapped = !isPro && allPositions.length > FREE_POSITION_LIMIT;
+  const activityCapped = !isPro && allActivity.length > FREE_ACTIVITY_LIMIT;
+
+  const hasPositions = allPositions.length > 0;
+  const hasActivity = allActivity.length > 0;
   const hasAnyData = hasPositions || hasActivity || (data?.portfolioValue ?? 0) > 0;
 
   return (
@@ -270,10 +284,18 @@ export default function WhalePage({ params }: { params: Promise<{ address: strin
                     {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
                   </div>
                 ) : hasPositions ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {data!.positions.map((pos, i) => (
-                      <PositionCard key={`${pos.conditionId}-${i}`} pos={pos} />
-                    ))}
+                  <div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {visiblePositions.map((pos, i) => (
+                        <PositionCard key={`${pos.conditionId}-${i}`} pos={pos} />
+                      ))}
+                    </div>
+                    {positionsCapped && (
+                      <div className="mt-4 p-3 rounded-lg bg-secondary/50 text-center text-small text-muted-foreground">
+                        {allPositions.length - FREE_POSITION_LIMIT} more positions hidden —{" "}
+                        <Link href="/pricing" className="text-primary underline">upgrade to Pro</Link> for full access
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 text-small text-muted-foreground p-2">
@@ -313,10 +335,18 @@ export default function WhalePage({ params }: { params: Promise<{ address: strin
                     ))}
                   </div>
                 ) : hasActivity ? (
-                  <div className="max-h-[400px] overflow-y-auto">
-                    {data!.activity.map((item) => (
-                      <ActivityItem key={item.id} item={item} />
-                    ))}
+                  <div>
+                    <div className="max-h-[400px] overflow-y-auto">
+                      {visibleActivity.map((item) => (
+                        <ActivityItem key={item.id} item={item} />
+                      ))}
+                    </div>
+                    {activityCapped && (
+                      <div className="mt-4 p-3 rounded-lg bg-secondary/50 text-center text-small text-muted-foreground">
+                        {allActivity.length - FREE_ACTIVITY_LIMIT} more trades hidden —{" "}
+                        <Link href="/pricing" className="text-primary underline">upgrade to Pro</Link> for full history
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 text-small text-muted-foreground p-2">
