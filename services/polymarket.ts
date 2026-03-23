@@ -295,7 +295,10 @@ export async function searchMarkets(query: string): Promise<TransformedMarket[]>
   }
 }
 
-// Fetch real price history from the CLOB API (via server proxy)
+// Fetch real price history from the CLOB API (via server proxy).
+// CLOB endpoint: GET /prices-history?market=<yesTokenId>&interval=<period>&fidelity=<minutes>
+// The `market` parameter takes the CLOB asset/token ID (not the Gamma market ID or conditionId).
+// Confirmed: returns { history: [{t: unixTimestamp, p: probability}] } for all market types.
 export async function fetchPriceHistory(
   tokenId: string,
   timeframe: string = "30D"

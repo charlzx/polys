@@ -176,11 +176,16 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
 
   // Live WebSocket data (real CLOB connection when yesTokenId available)
-  const { currentOdds, volatility, momentum, liveOrderBook, liveTrades } = useSingleMarketWebSocket(
+  const { currentOdds, lastUpdate, volatility, momentum, liveOrderBook, liveTrades } = useSingleMarketWebSocket(
     id,
     market?.yesOdds,
     market?.yesTokenId
   );
+
+  // Stale data: if no WS update in 60s, data may be stale
+  const isLiveDataStale = market?.yesTokenId
+    ? lastUpdate === null || Date.now() - lastUpdate > 60_000
+    : false;
 
   // Prefer live WebSocket odds; fall back to query data
   const displayYesOdds = currentOdds?.yes ?? market?.yesOdds ?? 50;
@@ -275,10 +280,17 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                 <span className="w-1.5 h-1.5 rounded-full bg-success mr-1.5" />
                 Active
               </Badge>
-              <Badge variant="secondary" className="text-caption gap-1">
-                <Broadcast className="h-2.5 w-2.5 text-success animate-pulse" />
-                Live
-              </Badge>
+              {isLiveDataStale ? (
+                <Badge variant="secondary" className="text-caption gap-1 text-warning">
+                  <Broadcast className="h-2.5 w-2.5 text-warning" />
+                  Reconnecting
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="text-caption gap-1">
+                  <Broadcast className="h-2.5 w-2.5 text-success animate-pulse" />
+                  Live
+                </Badge>
+              )}
             </div>
             <h1 className="text-title md:text-display font-bold mb-2">{market.name}</h1>
             {market.description && (
