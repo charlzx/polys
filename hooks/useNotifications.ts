@@ -38,6 +38,7 @@ export function useNotifications(userId: string | undefined) {
   const supabase = useMemo(() => createClient(), []);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -46,10 +47,11 @@ export function useNotifications(userId: string | undefined) {
       return;
     }
     setIsLoading(true);
+    setError(null);
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-    const { data } = await supabase
+    const { data, error: err } = await supabase
       .from("alerts")
       .select("id, name, alert_type, market_name, condition_text, last_triggered_at")
       .eq("user_id", userId)
@@ -58,18 +60,22 @@ export function useNotifications(userId: string | undefined) {
       .order("last_triggered_at", { ascending: false })
       .limit(10);
 
-    const rows = data ?? [];
-    setNotifications(
-      rows.map((row) => ({
-        id: row.id,
-        title: row.name,
-        description: row.condition_text ?? `${alertTypeLabel(row.alert_type)} triggered`,
-        alertType: alertTypeLabel(row.alert_type),
-        marketName: row.market_name,
-        triggeredAt: row.last_triggered_at,
-        timeAgo: timeAgo(row.last_triggered_at),
-      }))
-    );
+    if (err) {
+      setError(err.message);
+    } else {
+      const rows = data ?? [];
+      setNotifications(
+        rows.map((row) => ({
+          id: row.id,
+          title: row.name,
+          description: row.condition_text ?? `${alertTypeLabel(row.alert_type)} triggered`,
+          alertType: alertTypeLabel(row.alert_type),
+          marketName: row.market_name,
+          triggeredAt: row.last_triggered_at,
+          timeAgo: timeAgo(row.last_triggered_at),
+        }))
+      );
+    }
     setIsLoading(false);
   }, [supabase, userId]);
 
@@ -77,5 +83,5 @@ export function useNotifications(userId: string | undefined) {
     load();
   }, [load]);
 
-  return { notifications, count: notifications.length, isLoading, reload: load };
+  return { notifications, count: notifications.length, isLoading, error, reload: load };
 }

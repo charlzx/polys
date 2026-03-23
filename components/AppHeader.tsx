@@ -44,7 +44,7 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
   const router = useRouter();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const { user, logout } = useAuth();
-  const { notifications, count: notifCount } = useNotifications(user?.id);
+  const { notifications, count: notifCount, isLoading: notifLoading } = useNotifications(user?.id);
 
   const displayName = user?.name ?? "User";
   const displayEmail = user?.email ?? "";
@@ -110,7 +110,11 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
                   </div>
                 </div>
                 <div className="max-h-[300px] overflow-y-auto">
-                  {notifications.length === 0 ? (
+                  {notifLoading ? (
+                    <div className="p-6 text-center text-small text-muted-foreground animate-pulse">
+                      Loading…
+                    </div>
+                  ) : notifications.length === 0 ? (
                     <div className="p-6 text-center text-small text-muted-foreground">
                       No alerts triggered in the last 24h
                     </div>

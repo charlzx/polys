@@ -318,7 +318,7 @@ export default function DashboardPage() {
                 href: "/alerts",
               },
               {
-                label: "Triggered Today",
+                label: "Triggered (24h)",
                 value: statsLoading ? "—" : String(stats.triggeredTodayCount),
                 icon: TrendUpIcon,
                 href: "/alerts",
