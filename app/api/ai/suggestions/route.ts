@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { requireAuth } from "@/lib/ai-auth";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 export async function POST(req: NextRequest) {
+  const authError = await requireAuth(req);
+  if (authError) return authError;
+
   if (!GEMINI_API_KEY) {
     return NextResponse.json({ error: "AI features require a GEMINI_API_KEY" }, { status: 503 });
   }
