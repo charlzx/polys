@@ -66,6 +66,19 @@ export default function SignupPage() {
 
     const errMsg = await signup(email, password, name);
 
+    if (errMsg === "CONFIRM_EMAIL") {
+      // Email confirmation required — session not yet active, stay on this page
+      setSuccessMsg(
+        "Account created! Check your inbox to confirm your email, then sign in."
+      );
+      setIsLoading(false);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("polys-return-url");
+      }
+      setTimeout(() => router.push("/login"), 3000);
+      return;
+    }
+
     if (errMsg) {
       const { field, text } = mapAuthError(errMsg);
       setFieldErrors({ [field]: text });
@@ -73,18 +86,12 @@ export default function SignupPage() {
       return;
     }
 
-    setSuccessMsg(
-      "Account created! Check your email to confirm your address, then sign in."
-    );
+    // Session is live (email confirmation disabled) — redirect to intended destination
     setIsLoading(false);
-
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("polys-return-url");
     }
-
-    // If email confirmation is disabled the session is live immediately;
-    // onAuthStateChange in useAuth will pick it up and redirect will work.
-    setTimeout(() => router.push(returnUrl), 1500);
+    router.push(returnUrl);
   };
 
   const handleSocialLogin = (provider: string) => {
