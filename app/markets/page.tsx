@@ -221,10 +221,18 @@ export default function MarketsPage() {
   );
 
   const handleToggleWatch = async (market: TransformedMarket) => {
-    const added = await toggleWatchlist(market.id, market.name, market.category);
+    const result = await toggleWatchlist(market.id, market.name, market.category);
+    if (result === null) {
+      // Not authenticated — prompt login
+      toast({
+        title: "Sign in to watch markets",
+        description: "Create a free account to track markets in your watchlist.",
+      });
+      return;
+    }
     toast({
-      title: added ? "Added to watchlist" : "Removed from watchlist",
-      description: added
+      title: result ? "Added to watchlist" : "Removed from watchlist",
+      description: result
         ? `"${market.name}" added to your watchlist`
         : `"${market.name}" removed from your watchlist`,
     });

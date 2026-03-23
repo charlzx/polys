@@ -220,21 +220,41 @@ function SuggestionsPanel({
 export default function WatchlistPage() {
   const { toast } = useToast();
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
-  const { watchlistIds, toggleWatchlist, addToWatchlist, isLoading: watchlistLoading } = useWatchlist();
+  const { watchlistIds, watchlistItems, toggleWatchlist, addToWatchlist, isLoading: watchlistLoading } = useWatchlist();
 
-  // Fetch markets
-  const { data: markets, isLoading: marketsLoading } = useMarkets({
+  // Fetch markets for live stats + suggestions
+  const { data: markets } = useMarkets({
     limit: 50,
     active: true,
   });
 
-  const isLoading = watchlistLoading || marketsLoading;
+  const isLoading = watchlistLoading;
 
-  // Filter markets to only show watchlisted ones
-  const watchlistedMarkets = useMemo(() => {
-    if (!markets) return [];
-    return markets.filter((m) => watchlistIds.includes(m.id));
-  }, [markets, watchlistIds]);
+  // Build watchlisted markets: merge Supabase watchlist rows with live market data where available.
+  // Falls back to stub TransformedMarket from stored metadata if not in the live fetch.
+  const watchlistedMarkets = useMemo((): TransformedMarket[] => {
+    const marketMap = new Map((markets ?? []).map((m) => [m.id, m]));
+    return watchlistItems.map((item) => {
+      const live = marketMap.get(item.market_id);
+      if (live) return live;
+      // Stub from stored metadata — shows name and category even if not in top-50 list
+      return {
+        id: item.market_id,
+        name: item.market_name,
+        category: item.category,
+        yesOdds: 50,
+        noOdds: 50,
+        change24h: 0,
+        volume: "—",
+        liquidity: "—",
+        slug: item.market_id,
+        endDate: "",
+        description: "",
+        active: true,
+        volume24h: "—",
+      } as TransformedMarket;
+    });
+  }, [watchlistItems, markets]);
 
   // Derive top categories from watchlisted markets for smart suggestions
   const watchedCategories = useMemo(() => {
@@ -249,10 +269,11 @@ export default function WatchlistPage() {
   }, [watchlistedMarkets]);
 
   const handleToggleWatch = async (market: TransformedMarket) => {
-    const added = await toggleWatchlist(market.id, market.name, market.category);
+    const result = await toggleWatchlist(market.id, market.name, market.category);
+    if (result === null) return; // not authenticated — shouldn't happen on this page
     toast({
-      title: added ? "Added to watchlist" : "Removed from watchlist",
-      description: added
+      title: result ? "Added to watchlist" : "Removed from watchlist",
+      description: result
         ? `"${market.name}" added to your watchlist`
         : `"${market.name}" removed from your watchlist`,
     });
