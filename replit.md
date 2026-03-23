@@ -60,6 +60,18 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - **PublicHeader**: same pattern — `handleSignOut` async logout + redirect
 - **Env secrets required**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
+## Email Alerts (Task #5 — COMPLETE)
+- **Email provider**: Resend (`https://api.resend.com/emails`) — no SDK, raw fetch with `RESEND_API_KEY`
+- **Send route**: `app/api/alerts/send/route.ts` — POST endpoint; accepts `AlertEmailPayload`; builds styled HTML email; returns `{ ok, emailId }`
+- **Check/eval engine**: `app/api/alerts/check/route.ts` — GET endpoint; uses Supabase service role to read ALL active alerts; fetches live market data from `/api/markets`; evaluates odds/volume/new-market conditions; fires email + updates `last_triggered_at` + `trigger_count`; 60-min cooldown guard per alert
+- **Alerts CRUD hook**: `hooks/useAlerts.ts` — browser Supabase client; `createAlert`, `toggleAlert`, `deleteAlert`; RLS ensures users only see their own rows
+- **Alerts page**: `app/alerts/page.tsx` — fully wired to Supabase; live CRUD; real-time stats (total / active / triggered-today); loading skeletons; graceful error handling
+- **Supabase migration**: `supabase/migrations/002_alerts.sql` — `public.alerts` table; RLS policies (user-scoped CRUD + service role override); indexes
+- **Resend domain note**: Without domain verification, Resend can only send to the account owner's email. To send to all users, verify a custom domain at resend.com/domains and update `from` in `app/api/alerts/send/route.ts`
+- **Sender**: `onboarding@resend.dev` (Resend test domain; works without custom domain setup)
+- **Env secrets required**: `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- **DB migration**: Run `supabase/migrations/002_alerts.sql` in Supabase Dashboard SQL Editor before using alerts
+
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
 - **Build**: `pnpm run build`
@@ -68,4 +80,4 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 ## Replit Configuration
 - Dev server runs on port 5000 with host `0.0.0.0` for Replit preview pane compatibility
 - Workflow: "Start application" → `pnpm run dev`
-- Required secrets: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Required secrets: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
