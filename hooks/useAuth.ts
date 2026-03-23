@@ -109,14 +109,15 @@ export function useAuth() {
 
       if (error) return error.message;
 
-      // Insert profile row immediately if session is available (email confirmation disabled)
-      if (data.session && data.user) {
-        await supabase.from("profiles").upsert({
-          id: data.user.id,
-          name,
-          tier: "free",
-          avatar_url: null,
-        });
+      // Best-effort client-side upsert (works when email confirmation is disabled).
+      // When confirmation is required there is no session yet, so this is skipped;
+      // the DB trigger on auth.users (in migrations/001_profiles.sql) handles
+      // profile creation reliably in that case.
+      if (data.user) {
+        await supabase.from("profiles").upsert(
+          { id: data.user.id, name, tier: "free", avatar_url: null },
+          { onConflict: "id", ignoreDuplicates: true }
+        );
       }
 
       return null;
