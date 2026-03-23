@@ -24,31 +24,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { useAuth } from "@/hooks/useAuth";
-
-// Static UI notifications — display chrome only
-const notifications = [
-  {
-    id: 1,
-    title: "BTC >$100k odds spike",
-    description: "Odds increased by 15% in the last 4 hours",
-    time: "2 hours ago",
-    unread: true,
-  },
-  {
-    id: 2,
-    title: "Volume alert triggered",
-    description: "2024 Presidential Election volume up 200%",
-    time: "4 hours ago",
-    unread: true,
-  },
-  {
-    id: 3,
-    title: "New arbitrage opportunity",
-    description: "6.2% opportunity on Bitcoin >$100k",
-    time: "5 hours ago",
-    unread: false,
-  },
-];
+import { useNotifications } from "@/hooks/useNotifications";
 
 const navTabs = [
   { label: "Dashboard", href: "/dashboard", icon: House },
@@ -68,6 +44,7 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
   const router = useRouter();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const { user, logout } = useAuth();
+  const { notifications, count: notifCount } = useNotifications(user?.id);
 
   const displayName = user?.name ?? "User";
   const displayEmail = user?.email ?? "";
@@ -113,7 +90,7 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell weight="regular" className="h-5 w-5" />
-                  {notifications.some((n) => n.unread) && (
+                  {notifCount > 0 && (
                     <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary" />
                   )}
                   <span className="sr-only">Notifications</span>
@@ -123,35 +100,39 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
                 <div className="p-4 border-b border-border">
                   <div className="flex items-center justify-between">
                     <h4 className="text-small font-semibold">Notifications</h4>
-                    <Badge variant="secondary" className="text-caption">
-                      {notifications.filter((n) => n.unread).length} new
-                    </Badge>
+                    {notifCount > 0 && (
+                      <Badge variant="secondary" className="text-caption">
+                        {notifCount} triggered
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <div className="max-h-[300px] overflow-y-auto">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors cursor-pointer ${
-                        notification.unread ? "bg-primary/5" : ""
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        {notification.unread && (
+                  {notifications.length === 0 ? (
+                    <div className="p-6 text-center text-small text-muted-foreground">
+                      No alerts triggered in the last 24h
+                    </div>
+                  ) : (
+                    notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className="p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors cursor-pointer bg-primary/5"
+                      >
+                        <div className="flex items-start gap-2">
                           <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-small font-medium truncate">{notification.title}</p>
-                          <p className="text-caption text-muted-foreground line-clamp-2">
-                            {notification.description}
-                          </p>
-                          <p className="text-caption text-muted-foreground mt-1">
-                            {notification.time}
-                          </p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-small font-medium truncate">{notification.title}</p>
+                            <p className="text-caption text-muted-foreground line-clamp-2">
+                              {notification.description}
+                            </p>
+                            <p className="text-caption text-muted-foreground mt-1">
+                              {notification.timeAgo}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
                 <div className="p-3 border-t border-border">
                   <Button

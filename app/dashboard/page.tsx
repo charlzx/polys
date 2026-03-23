@@ -5,11 +5,14 @@ import Link from "next/link";
 import { motion, useMotionValue, useTransform } from "framer-motion";
 import { AppHeader } from "@/components/AppHeader";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useAuth } from "@/hooks/useAuth";
 import {
   ArrowRight,
   ArrowsCounterClockwise,
+  Bell,
   Broadcast,
   CaretDown,
+  Eye,
   TrendUpIcon,
   TrendDownIcon,
 } from "@phosphor-icons/react";
@@ -18,14 +21,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-// Static display-only UI data — not market data; intentionally not live
-import { quickStats } from "@/data/quickStats";
-import { recentAlerts } from "@/data/alerts";
 import { useMarkets } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import { WhaleActivityFeed } from "@/components/WhaleActivityFeed";
 import { useMarketIntelligence } from "@/services/ai";
 import { Sparkle } from "@phosphor-icons/react";
+import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { useAlerts } from "@/hooks/useAlerts";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -225,6 +227,21 @@ const SwipeableMarketCard = ({
 export default function DashboardPage() {
   const { data: markets, isLoading, error, refetch } = useMarkets({ limit: 20, active: true });
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
+  const { user } = useAuth();
+
+  const { stats, isLoading: statsLoading } = useDashboardStats(user?.id);
+  const { alerts: userAlerts, isLoading: alertsLoading } = useAlerts(user?.id);
+
+  // Last 5 alerts sorted by most recent activity
+  const recentAlerts = useMemo(() => {
+    return [...userAlerts]
+      .sort((a, b) => {
+        const aTime = a.last_triggered_at ?? a.created_at;
+        const bTime = b.last_triggered_at ?? b.created_at;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      })
+      .slice(0, 5);
+  }, [userAlerts]);
 
   const tokenPairs = useMemo(
     () =>
@@ -284,9 +301,28 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+            className="grid grid-cols-2 gap-4 lg:grid-cols-3"
           >
-            {quickStats.map((stat, index) => {
+            {[
+              {
+                label: "Markets Watched",
+                value: statsLoading ? "—" : String(stats.watchedCount),
+                icon: Eye,
+                href: "/watchlist",
+              },
+              {
+                label: "Active Alerts",
+                value: statsLoading ? "—" : String(stats.activeAlertCount),
+                icon: Bell,
+                href: "/alerts",
+              },
+              {
+                label: "Triggered Today",
+                value: statsLoading ? "—" : String(stats.triggeredTodayCount),
+                icon: TrendUpIcon,
+                href: "/alerts",
+              },
+            ].map((stat, index) => {
               const Icon = stat.icon;
               return (
                 <motion.div
@@ -295,24 +331,23 @@ export default function DashboardPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
                 >
-                  <Card>
-                    <CardContent className="p-4 md:p-5">
-                      <div className="flex items-center justify-between mb-2 gap-2">
-                        <Icon weight="duotone" className="h-5 w-5 text-muted-foreground shrink-0" />
-                        {stat.change && (
-                          <span
-                            className={`text-small font-medium truncate ${
-                              stat.positive ? "text-success" : "text-destructive"
-                            }`}
-                          >
-                            {stat.change}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-title md:text-display font-bold truncate">{stat.value}</div>
-                      <div className="text-small text-muted-foreground mt-1 truncate">{stat.label}</div>
-                    </CardContent>
-                  </Card>
+                  <Link href={stat.href}>
+                    <Card className="hover:bg-secondary/50 transition-base cursor-pointer">
+                      <CardContent className="p-4 md:p-5">
+                        <div className="flex items-center justify-between mb-2 gap-2">
+                          <Icon weight="duotone" className="h-5 w-5 text-muted-foreground shrink-0" />
+                        </div>
+                        <div className="text-title md:text-display font-bold truncate">
+                          {statsLoading ? (
+                            <Skeleton className="h-7 w-12" />
+                          ) : (
+                            stat.value
+                          )}
+                        </div>
+                        <div className="text-small text-muted-foreground mt-1 truncate">{stat.label}</div>
+                      </CardContent>
+                    </Card>
+                  </Link>
                 </motion.div>
               );
             })}
@@ -409,26 +444,64 @@ export default function DashboardPage() {
                 }
               >
                 <div className="space-y-3 max-h-[280px] overflow-y-auto">
-                  {recentAlerts.map((alert) => (
-                    <motion.div
-                      key={alert.id}
-                      whileHover={{ scale: 1.01 }}
-                      className="p-3 md:p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-base cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <Badge variant="secondary" className="text-caption px-2 py-0.5">
-                          {alert.type}
-                        </Badge>
-                        <span className="text-small text-muted-foreground">
-                          {alert.time}
-                        </span>
+                  {alertsLoading ? (
+                    [...Array(3)].map((_, i) => (
+                      <div key={i} className="space-y-2 p-3 rounded-lg bg-secondary/50">
+                        <Skeleton className="h-4 w-1/3" />
+                        <Skeleton className="h-4 w-3/4" />
                       </div>
-                      <p className="text-body font-medium truncate">{alert.market}</p>
-                      <p className="text-small text-muted-foreground line-clamp-2 mt-1">
-                        {alert.description}
-                      </p>
-                    </motion.div>
-                  ))}
+                    ))
+                  ) : recentAlerts.length === 0 ? (
+                    <div className="p-4 text-center">
+                      <p className="text-small text-muted-foreground mb-2">No alerts yet</p>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href="/alerts">Create your first alert</Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    recentAlerts.map((alert) => {
+                      const typeLabel =
+                        alert.alert_type === "odds" ? "Odds Alert"
+                        : alert.alert_type === "volume" ? "Volume Alert"
+                        : alert.alert_type === "new" ? "New Market"
+                        : "Alert";
+                      const timeStr = alert.last_triggered_at
+                        ? (() => {
+                            const diff = Date.now() - new Date(alert.last_triggered_at).getTime();
+                            const m = Math.floor(diff / 60_000);
+                            if (m < 60) return `${m}m ago`;
+                            const h = Math.floor(m / 60);
+                            if (h < 24) return `${h}h ago`;
+                            return `${Math.floor(h / 24)}d ago`;
+                          })()
+                        : "Never triggered";
+                      return (
+                        <motion.div
+                          key={alert.id}
+                          whileHover={{ scale: 1.01 }}
+                          className="p-3 md:p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-base cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <Badge
+                              variant="secondary"
+                              className={`text-caption px-2 py-0.5 ${
+                                alert.status === "triggered" ? "text-success" : ""
+                              }`}
+                            >
+                              {typeLabel}
+                            </Badge>
+                            <span className="text-small text-muted-foreground">{timeStr}</span>
+                          </div>
+                          <p className="text-body font-medium truncate">
+                            {alert.market_name ?? alert.name}
+                          </p>
+                          <p className="text-small text-muted-foreground line-clamp-2 mt-1">
+                            {alert.condition_text ?? alert.name}
+                          </p>
+                        </motion.div>
+                      );
+                    })
+                  )}
                 </div>
 
                 <Button variant="ghost" size="sm" asChild className="w-full mt-4 md:hidden">

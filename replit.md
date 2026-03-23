@@ -104,6 +104,14 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - **Env secrets required**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - **DB migration**: Run `supabase/migrations/003_watchlist.sql` in Supabase Dashboard SQL Editor
 
+## Dashboard Data & Notifications (Task #9 — COMPLETE)
+- **`hooks/useDashboardStats.ts`**: queries Supabase for watched market count, active alert count, and alerts triggered in last 24h; replaces `quickStats` static data
+- **`hooks/useNotifications.ts`**: queries Supabase for alerts with `status=triggered` + `last_triggered_at` within last 24h; powers header bell badge and notification popover
+- **Dashboard stat cards**: now show real "Markets Watched", "Active Alerts", "Triggered Today" with skeleton loading; removed fake P&L and Win Rate cards; stats link to `/watchlist` and `/alerts`
+- **Recent Alerts on dashboard**: now renders from `useAlerts` hook (real Supabase `alerts` table), sorted by most recent activity, with proper loading skeleton and empty state with CTA
+- **AppHeader notifications**: bell badge appears only when real triggered alerts exist in last 24h; popover lists them with type, description, and time ago
+- **Cleanup**: `data/quickStats.ts` emptied (replaced by hook); `recentAlerts` mock array removed from `data/alerts.ts`
+
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
 - **Build**: `pnpm run build`
