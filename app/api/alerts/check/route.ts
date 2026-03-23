@@ -261,10 +261,21 @@ export async function GET(request: Request) {
     const { data: userData } = await supabase.auth.admin.getUserById(alert.user_id);
     const email = userData?.user?.email;
 
-    // Only fire if email delivery succeeds (or email is disabled for this alert).
+    // Check profile-level email preference (email_alerts_enabled column added in 003_watchlist.sql)
+    let profileEmailEnabled = true;
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("email_alerts_enabled")
+      .eq("id", alert.user_id)
+      .single();
+    if (profileData && profileData.email_alerts_enabled === false) {
+      profileEmailEnabled = false;
+    }
+
+    // Only fire if email delivery succeeds (or email is disabled at alert or profile level).
     // On failure, the alert stays 'active' and retries on the next cron run.
     let emailOk = true;
-    if (alert.delivery_email && email) {
+    if (alert.delivery_email && email && profileEmailEnabled) {
       emailOk = await sendAlertEmail(origin, email, alert, currentValue, changeText, resolvedMarketId);
     }
 

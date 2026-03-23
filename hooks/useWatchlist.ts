@@ -42,11 +42,20 @@ export function useWatchlist() {
   const addToWatchlist = useCallback(
     async (marketId: string, marketName: string, category: string) => {
       if (!user?.id) return;
-      await supabase.from("watchlist").upsert(
-        { user_id: user.id, market_id: marketId, market_name: marketName, category },
-        { onConflict: "user_id,market_id" }
-      );
+      // Optimistic update first
       setWatchlistIds((prev) => (prev.includes(marketId) ? prev : [marketId, ...prev]));
+      const { error } = await supabase.from("watchlist").insert({
+        user_id: user.id,
+        market_id: marketId,
+        market_name: marketName,
+        category,
+      });
+      // Ignore unique-constraint violations (already watched) — non-fatal
+      if (error && error.code !== "23505") {
+        console.warn("[useWatchlist] addToWatchlist error:", error.message);
+        // Rollback optimistic update on unexpected error
+        setWatchlistIds((prev) => prev.filter((id) => id !== marketId));
+      }
     },
     [supabase, user?.id]
   );
@@ -54,12 +63,18 @@ export function useWatchlist() {
   const removeFromWatchlist = useCallback(
     async (marketId: string) => {
       if (!user?.id) return;
-      await supabase
+      // Optimistic update first
+      setWatchlistIds((prev) => prev.filter((id) => id !== marketId));
+      const { error } = await supabase
         .from("watchlist")
         .delete()
         .eq("user_id", user.id)
         .eq("market_id", marketId);
-      setWatchlistIds((prev) => prev.filter((id) => id !== marketId));
+      if (error) {
+        console.warn("[useWatchlist] removeFromWatchlist error:", error.message);
+        // Rollback — re-add to local state
+        setWatchlistIds((prev) => (prev.includes(marketId) ? prev : [marketId, ...prev]));
+      }
     },
     [supabase, user?.id]
   );
