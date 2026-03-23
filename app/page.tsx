@@ -26,7 +26,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 
 // Single ticker item — defined outside component to avoid hook-violation during render
-function TickerItem({ market, id }: { market: TransformedMarket; id: string }) {
+function TickerItem({ market }: { market: TransformedMarket }) {
   return (
     <Link
       href={`/markets/${market.id}`}
@@ -66,8 +66,8 @@ function PredictionsTicker({ markets }: { markets: TransformedMarket[] }) {
   return (
     <div className="relative overflow-hidden border-b border-border bg-secondary/30">
       <div className="flex animate-scroll">
-        {items.map((m) => <TickerItem key={`first-${m.id}`} market={m} id={`first-${m.id}`} />)}
-        {items.map((m) => <TickerItem key={`second-${m.id}`} market={m} id={`second-${m.id}`} />)}
+        {items.map((m) => <TickerItem key={`first-${m.id}`} market={m} />)}
+        {items.map((m) => <TickerItem key={`second-${m.id}`} market={m} />)}
       </div>
     </div>
   );

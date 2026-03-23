@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { useAuth } from "@/hooks/useAuth";
 import {
   TrendUpIcon,
   TrendDownIcon,
@@ -17,50 +16,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWatchlist } from "@/hooks/useWatchlist";
-import { useMarkets } from "@/services/polymarket";
-import type { TransformedMarket } from "@/services/polymarket";
+import { useTrackedMarkets } from "@/hooks/useTrackedMarkets";
 import { motion } from "framer-motion";
 
 export default function PortfolioPage() {
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
-  const { user } = useAuth();
   const { watchlistItems, isLoading: watchlistLoading } = useWatchlist();
-
-  // Fetch live market data to hydrate watchlist items with current odds/volume
-  const { data: markets, isLoading: marketsLoading } = useMarkets({ limit: 50, active: true });
+  const { trackedMarkets, isLoading: marketsLoading } = useTrackedMarkets(watchlistItems);
 
   const isLoading = watchlistLoading || marketsLoading;
 
-  // Merge watchlist items with live market data
-  const trackedMarkets = useMemo((): TransformedMarket[] => {
-    const marketMap = new Map((markets ?? []).map((m) => [m.id, m]));
-    return watchlistItems.map((item) => {
-      const live = marketMap.get(item.market_id);
-      if (live) return live;
-      // Fallback stub from stored metadata
-      return {
-        id: item.market_id,
-        name: item.market_name,
-        category: item.category,
-        yesOdds: 50,
-        noOdds: 50,
-        change24h: 0,
-        volume: "—",
-        volume24h: "—",
-        liquidity: "—",
-        slug: item.market_id,
-        endDate: "",
-        description: "",
-        active: true,
-      } as TransformedMarket;
-    });
-  }, [watchlistItems, markets]);
-
-  // Performance summary
+  // Performance summary — only count markets where we have real 24h data
   const summary = useMemo(() => {
-    const withLive = trackedMarkets.filter((m) => m.change24h !== 0);
-    const up = withLive.filter((m) => m.change24h > 0).length;
-    const down = withLive.filter((m) => m.change24h < 0).length;
+    const up = trackedMarkets.filter((m) => m.change24h > 0).length;
+    const down = trackedMarkets.filter((m) => m.change24h < 0).length;
     return { up, down, total: trackedMarkets.length };
   }, [trackedMarkets]);
 
@@ -163,7 +132,7 @@ export default function PortfolioPage() {
               </CardHeader>
               <CardContent className="p-0">
                 {isLoading ? (
-                  <div className="space-y-0 divide-y divide-border">
+                  <div className="divide-y divide-border">
                     {[...Array(5)].map((_, i) => (
                       <div key={i} className="p-4 space-y-2">
                         <Skeleton className="h-4 w-2/3" />
