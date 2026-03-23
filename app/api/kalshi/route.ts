@@ -4,17 +4,25 @@ import { fetchKalshiEventsServer } from "@/services/kalshi";
 // GET /api/kalshi
 // Returns a browsable list of active Kalshi markets from the events endpoint.
 // Query params:
-//   limit   - max markets to return (default 100, max 300)
+//   limit    - max markets to return (default 200, max 300)
 //   category - filter by category slug (optional)
-//   search  - keyword filter applied server-side (optional)
+//   search   - keyword filter applied server-side (optional)
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const limitParam = parseInt(searchParams.get("limit") ?? "100", 10);
+  const limitParam = parseInt(searchParams.get("limit") ?? "200", 10);
   const limit = Math.min(Math.max(1, limitParam), 300);
   const categoryFilter = searchParams.get("category") ?? "";
   const searchFilter = (searchParams.get("search") ?? "").toLowerCase();
 
-  const markets = await fetchKalshiEventsServer();
+  let markets;
+  try {
+    markets = await fetchKalshiEventsServer();
+  } catch (err) {
+    return NextResponse.json(
+      { error: "Failed to fetch Kalshi markets", markets: [], total: 0, filteredTotal: 0 },
+      { status: 502 }
+    );
+  }
 
   let filtered = markets;
 
@@ -32,7 +40,9 @@ export async function GET(req: Request) {
     );
   }
 
+  // filteredTotal is the count before limit — useful for future server-side pagination
+  const filteredTotal = filtered.length;
   const result = filtered.slice(0, limit);
 
-  return NextResponse.json({ markets: result, total: result.length });
+  return NextResponse.json({ markets: result, total: markets.length, filteredTotal });
 }
