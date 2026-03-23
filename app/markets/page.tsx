@@ -27,6 +27,7 @@ import {
   CaretRight,
 } from "@phosphor-icons/react";
 import { useMarkets, MARKET_CATEGORIES, type MarketCategory, type TransformedMarket } from "@/services/polymarket";
+import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 import { AppHeader } from "@/components/AppHeader";
@@ -172,11 +173,32 @@ export default function MarketsPage() {
     active: true,
   });
 
-  // Filter and sort markets
+  // Build token pairs for real CLOB WebSocket updates
+  const tokenPairs = useMemo(
+    () =>
+      (markets ?? [])
+        .filter((m) => m.yesTokenId)
+        .map((m) => ({ marketId: m.id, yesTokenId: m.yesTokenId! })),
+    [markets]
+  );
+
+  const { applyUpdatesToMarkets } = useMarketWebSocket({
+    tokenPairs,
+    marketIds: markets?.map((m) => m.id) ?? [],
+    enabled: (markets?.length ?? 0) > 0,
+  });
+
+  // Apply live WebSocket updates to market data
+  const liveMarkets = useMemo(
+    () => (markets ? applyUpdatesToMarkets(markets) : []),
+    [markets, applyUpdatesToMarkets]
+  );
+
+  // Filter and sort markets (using live WebSocket-updated prices where available)
   const filteredMarkets = useMemo(() => {
-    if (!markets) return [];
-    
-    let result = [...markets];
+    if (!liveMarkets.length && !markets) return [];
+
+    let result = [...liveMarkets];
 
     // Filter by search
     if (searchQuery) {

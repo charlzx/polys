@@ -18,18 +18,26 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - `app/api/price-history/` - Server-side proxy for CLOB price history API
 - `components/` - Shared React components and UI primitives
 - `services/polymarket.ts` - Real Polymarket Gamma API integration (no more mock data)
-- `hooks/useMarketWebSocket.ts` - Real-time market polling via Gamma API (15s interval)
+- `app/api/orderbook/` - Server-side proxy for CLOB order book API
+- `hooks/useMarketWebSocket.ts` - Real-time market updates via CLOB WebSocket (wss); polling fallback
 - `hooks/` - Custom React hooks
 - `lib/` - Utility functions
 - `data/` - Static data files
 
 ## API Integration (Task #1 — COMPLETE)
 - **Polymarket Gamma API**: `https://gamma-api.polymarket.com/markets` — market listings, prices, volumes
-- **Polymarket CLOB API**: `https://clob.polymarket.com/prices-history` — real price history charts
-- Both APIs are proxied server-side via Next.js API routes (`/api/markets`, `/api/price-history`) to avoid CORS issues
-- The WebSocket hook polls the Gamma API every 15s for live price updates (no simulation)
+- **Polymarket CLOB API**: `https://clob.polymarket.com` — price history charts, order book
+- **Polymarket CLOB WebSocket**: `wss://ws-subscriptions-clob.polymarket.com/ws/market` — real-time order book + price updates
+- All REST APIs are proxied server-side via Next.js `/api/` routes to bypass browser CORS restrictions
+- **Real-time architecture** (WebSocket-first):
+  - When markets have CLOB token IDs (`yesTokenId`), the hook connects to CLOB WebSocket and subscribes
+  - Receives `book` events (order book snapshots) → computes mid-price for live odds
+  - Receives `price_change` events → accumulates as live trades on market detail page
+  - Falls back to Gamma API polling (15s interval) when token IDs are unavailable
+  - Reconnects automatically on disconnect (3s backoff)
+- Used on: landing page, markets list, dashboard (all via `useMarketWebSocket`), and market detail (`useSingleMarketWebSocket`)
 - Category detection uses event tickers (e.g., `cbb-`, `nba-`) + keyword matching with word boundaries
-- `TransformedMarket` interface extended with `yesTokenId`, `noTokenId`, and `conditionId`
+- `TransformedMarket` extended with `yesTokenId`, `noTokenId`, `conditionId`
 
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
