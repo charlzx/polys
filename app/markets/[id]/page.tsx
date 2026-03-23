@@ -179,11 +179,15 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
 
   // Live WebSocket data (real CLOB connection when yesTokenId available)
-  const { volatility, momentum, liveOrderBook, liveTrades } = useSingleMarketWebSocket(
+  const { currentOdds, volatility, momentum, liveOrderBook, liveTrades } = useSingleMarketWebSocket(
     id,
     market?.yesOdds,
     market?.yesTokenId
   );
+
+  // Prefer live WebSocket odds; fall back to query data
+  const displayYesOdds = currentOdds?.yes ?? market?.yesOdds ?? 50;
+  const displayNoOdds = currentOdds?.no ?? market?.noOdds ?? 50;
 
   // Fetch real price history from CLOB API
   const { data: realHistory } = usePriceHistory(market?.yesTokenId, timeframe);
@@ -323,13 +327,13 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                   <div className="flex items-center gap-8">
                     <div>
                       <div className="text-display font-bold text-success">
-                        {market.yesOdds}%
+                        {displayYesOdds}%
                       </div>
                       <div className="text-small text-muted-foreground">YES</div>
                     </div>
                     <div>
                       <div className="text-display font-bold text-destructive">
-                        {market.noOdds}%
+                        {displayNoOdds}%
                       </div>
                       <div className="text-small text-muted-foreground">NO</div>
                     </div>
@@ -621,7 +625,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
               <CardContent>
                 <div className="space-y-3 filter blur-sm">
                   <p className="text-small text-muted-foreground">
-                    This market&apos;s odds ({market.yesOdds}%) diverge from our model estimate (47%). 
+                    This market&apos;s odds ({displayYesOdds}%) diverge from our model estimate (47%). 
                     Historical patterns suggest potential value opportunity.
                   </p>
                   <div className="flex items-center justify-between text-small">
