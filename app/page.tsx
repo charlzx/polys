@@ -313,30 +313,30 @@ function NewsCard({ item, index }: { item: NewsItem; index: number }) {
     >
       <Link
         href={`/news/${item.slug}`}
-        className="flex flex-col rounded-xl bg-card border border-border hover:border-primary/40 hover:shadow-lg transition-all group overflow-hidden h-full"
+        className="flex gap-3 rounded-xl bg-card border border-border hover:border-primary/40 hover:shadow-lg transition-all group overflow-hidden p-3 h-full"
       >
-        <div className="relative w-full h-36 bg-secondary/50">
-          {item.image ? (
-            <Image
-              src={item.image}
-              alt={item.question}
-              fill
-              className="object-cover"
-              sizes="320px"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Newspaper className="h-10 w-10 text-muted-foreground/30" />
-            </div>
+        {/* Text content */}
+        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+              {item.category}
+            </Badge>
+          </div>
+          <p className="text-small font-medium line-clamp-2 group-hover:text-primary transition-colors leading-snug">
+            {item.question}
+          </p>
+          {item.description && (
+            <p className="text-caption text-muted-foreground line-clamp-2 leading-snug">
+              {item.description}
+            </p>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2">
+          <div className="flex items-center gap-2 mt-auto pt-1">
             <Badge
               variant="secondary"
-              className={`text-caption font-semibold ${
-                item.yesOdds >= 60 ? "bg-success/20 text-success border-success/30" :
-                item.yesOdds <= 40 ? "bg-destructive/20 text-destructive border-destructive/30" :
-                "bg-secondary/80"
+              className={`text-[10px] px-1.5 py-0 font-semibold ${
+                item.yesOdds >= 60 ? "bg-success/15 text-success" :
+                item.yesOdds <= 40 ? "bg-destructive/15 text-destructive" :
+                ""
               }`}
             >
               {item.yesOdds}% YES
@@ -353,13 +353,25 @@ function NewsCard({ item, index }: { item: NewsItem; index: number }) {
                 {item.change24h > 0 ? "+" : ""}{item.change24h}%
               </span>
             )}
+            <span className="text-caption text-muted-foreground ml-auto">{item.volume}</span>
           </div>
         </div>
-        <div className="p-3 flex flex-col gap-1 flex-1">
-          <p className="text-small font-medium line-clamp-2 group-hover:text-primary transition-colors leading-snug">
-            {item.question}
-          </p>
-          <p className="text-caption text-muted-foreground mt-auto">{item.volume} Vol</p>
+
+        {/* Thumbnail */}
+        <div className="relative shrink-0 w-20 h-20 rounded-lg bg-secondary/50 overflow-hidden self-start">
+          {item.image ? (
+            <Image
+              src={item.image}
+              alt={item.question}
+              fill
+              className="object-cover"
+              sizes="80px"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Newspaper className="h-7 w-7 text-muted-foreground/30" />
+            </div>
+          )}
         </div>
       </Link>
     </motion.div>

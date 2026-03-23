@@ -44,32 +44,30 @@ function NewsCardGrid({ item, index }: { item: NewsItem; index: number }) {
     >
       <Link
         href={`/news/${item.slug}`}
-        className="flex flex-col rounded-xl bg-card border border-border hover:border-primary/40 hover:shadow-lg transition-all group overflow-hidden h-full"
+        className="flex gap-3 rounded-xl bg-card border border-border hover:border-primary/40 hover:shadow-lg transition-all group overflow-hidden p-4 h-full"
       >
-        <div className="relative w-full h-40 bg-secondary/50">
-          {item.image ? (
-            <Image
-              src={item.image}
-              alt={item.question}
-              fill
-              className="object-cover"
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Newspaper className="h-12 w-12 text-muted-foreground/30" />
-            </div>
+        {/* Text content */}
+        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+          <Badge variant="outline" className="text-caption w-fit">
+            {item.category}
+          </Badge>
+          <p className="text-small font-medium line-clamp-2 group-hover:text-primary transition-colors leading-snug">
+            {item.question}
+          </p>
+          {item.description && (
+            <p className="text-caption text-muted-foreground line-clamp-2 leading-snug">
+              {item.description}
+            </p>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2">
+          <div className="flex items-center gap-2 mt-auto pt-2 flex-wrap">
             <Badge
               variant="secondary"
-              className={`text-caption font-semibold ${
+              className={`text-[10px] px-1.5 py-0 font-semibold ${
                 item.yesOdds >= 60
-                  ? "bg-success/20 text-success border-success/30"
+                  ? "bg-success/15 text-success"
                   : item.yesOdds <= 40
-                  ? "bg-destructive/20 text-destructive border-destructive/30"
-                  : "bg-secondary/80"
+                  ? "bg-destructive/15 text-destructive"
+                  : ""
               }`}
             >
               {item.yesOdds}% YES
@@ -89,19 +87,25 @@ function NewsCardGrid({ item, index }: { item: NewsItem; index: number }) {
                 {item.change24h}%
               </span>
             )}
+            <span className="text-caption text-muted-foreground ml-auto">{item.volume} Vol</span>
           </div>
         </div>
-        <div className="p-4 flex flex-col gap-2 flex-1">
-          <Badge variant="outline" className="text-caption w-fit">
-            {item.category}
-          </Badge>
-          <p className="text-small font-medium line-clamp-2 group-hover:text-primary transition-colors leading-snug flex-1">
-            {item.question}
-          </p>
-          <div className="flex items-center justify-between text-caption text-muted-foreground mt-auto pt-2 border-t border-border/50">
-            <span>{item.volume} Vol</span>
-            {item.endDate && <span>Ends {item.endDate}</span>}
-          </div>
+
+        {/* Thumbnail */}
+        <div className="relative shrink-0 w-24 h-24 rounded-lg bg-secondary/50 overflow-hidden self-start">
+          {item.image ? (
+            <Image
+              src={item.image}
+              alt={item.question}
+              fill
+              className="object-cover"
+              sizes="96px"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Newspaper className="h-8 w-8 text-muted-foreground/30" />
+            </div>
+          )}
         </div>
       </Link>
     </motion.div>
@@ -110,13 +114,15 @@ function NewsCardGrid({ item, index }: { item: NewsItem; index: number }) {
 
 function NewsCardSkeleton() {
   return (
-    <div className="rounded-xl bg-card border border-border overflow-hidden">
-      <Skeleton className="w-full h-40" />
-      <div className="p-4 space-y-2">
+    <div className="rounded-xl bg-card border border-border overflow-hidden p-4 flex gap-3">
+      <div className="flex-1 space-y-2">
         <Skeleton className="h-4 w-16" />
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-2/3" />
       </div>
+      <Skeleton className="shrink-0 w-24 h-24 rounded-lg" />
     </div>
   );
 }
