@@ -98,6 +98,29 @@ function midPriceFromBook(bids: ClobBookLevel[], asks: ClobBookLevel[]): number 
   return (bestBid + bestAsk) / 2;
 }
 
+function applyMidUpdate(
+  marketId: string,
+  mid: number,
+  next: Map<string, MarketUpdate>,
+  prev: Map<string, MarketUpdate>
+) {
+  const newYes = Math.round(mid * 1000) / 10;
+  const existing = prev.get(marketId);
+  const prevYes = existing?.yesOdds ?? newYes;
+  const priceChange = parseFloat((newYes - prevYes).toFixed(2));
+  const absChange = Math.abs(priceChange);
+  next.set(marketId, {
+    marketId,
+    yesOdds: newYes,
+    noOdds: Math.round((100 - newYes) * 10) / 10,
+    volume24h: existing?.volume24h ?? 0,
+    timestamp: Date.now(),
+    volatility: absChange > 5 ? "high" : absChange > 2 ? "medium" : "low",
+    momentum: priceChange > 0.5 ? "bullish" : priceChange < -0.5 ? "bearish" : "neutral",
+    priceChange,
+  });
+}
+
 
 export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
   const { marketIds = [], tokenPairs = [], enabled = true } = options;
@@ -206,30 +229,23 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
                 const bookMsg = msg as ClobBookEvent;
                 const mid = midPriceFromBook(bookMsg.bids ?? [], bookMsg.asks ?? []);
                 if (mid === null) return;
-
-                const newYes = Math.round(mid * 1000) / 10;
-                const prevYes = prevPricesRef.current.get(marketId) ?? newYes;
-                const priceChange = parseFloat((newYes - prevYes).toFixed(2));
-                prevPricesRef.current.set(marketId, newYes);
-
-                const existing = prev.get(marketId);
-                const absChange = Math.abs(priceChange);
-
-                next.set(marketId, {
-                  marketId,
-                  yesOdds: newYes,
-                  noOdds: Math.round((100 - newYes) * 10) / 10,
-                  volume24h: existing?.volume24h ?? 0,
-                  timestamp: Date.now(),
-                  volatility: absChange > 5 ? "high" : absChange > 2 ? "medium" : "low",
-                  momentum:
-                    priceChange > 0.5 ? "bullish" : priceChange < -0.5 ? "bearish" : "neutral",
-                  priceChange,
-                });
+                applyMidUpdate(marketId, mid, next, prev);
+              } else if (msg.event_type === "price_change") {
+                // price_change events include best_bid/best_ask — use them for fresher updates
+                const pcMsg = msg as ClobPriceChangeEvent;
+                const changes = pcMsg.price_changes ?? pcMsg.changes ?? [];
+                // Find the item for this token (per-item asset_id or top-level)
+                const change = changes.find((c) =>
+                  (c.asset_id ?? pcMsg.asset_id) === assetId
+                );
+                if (change?.best_bid && change?.best_ask) {
+                  const bid = parseFloat(change.best_bid);
+                  const ask = parseFloat(change.best_ask);
+                  if (bid > 0 && ask < 1 && ask > bid) {
+                    applyMidUpdate(marketId, (bid + ask) / 2, next, prev);
+                  }
+                }
               }
-              // price_change events update individual order book levels;
-              // we don't recompute the mid-price from those here — the `book`
-              // snapshot on connect already seeds the state.
             });
             return next;
           });
