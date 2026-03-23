@@ -71,6 +71,7 @@ function OrderBookChart({ bids, asks, maxTotal }: {
   asks: { price: number; size: number; total: number }[];
   maxTotal: number;
 }) {
+  const safeMax = maxTotal > 0 ? maxTotal : 1; // avoid division-by-zero
   const depthData = [
     ...bids.map(b => ({ price: b.price, bidDepth: b.total, askDepth: 0 })).reverse(),
     ...asks.map(a => ({ price: a.price, bidDepth: 0, askDepth: a.total })),
@@ -100,7 +101,7 @@ function OrderBookChart({ bids, asks, maxTotal }: {
               tickLine={false}
               axisLine={false}
             />
-            <YAxis hide domain={[0, maxTotal * 1.1]} />
+            <YAxis hide domain={[0, safeMax * 1.1]} />
             <Area type="stepAfter" dataKey="bidDepth" stroke="oklch(45% 0.15 145)" fill="url(#bidGradient)" />
             <Area type="stepAfter" dataKey="askDepth" stroke="oklch(58% 0.22 25)" fill="url(#askGradient)" />
           </AreaChart>
@@ -119,7 +120,7 @@ function OrderBookChart({ bids, asks, maxTotal }: {
             <div key={i} className="flex justify-between px-2 py-0.5 relative">
               <div 
                 className="absolute inset-y-0 right-0 bg-success/10" 
-                style={{ width: `${(bid.total / maxTotal) * 100}%` }} 
+                style={{ width: `${(bid.total / safeMax) * 100}%` }} 
               />
               <span className="text-success relative z-10">{bid.price.toFixed(2)}</span>
               <span className="relative z-10 font-mono">{bid.size.toLocaleString()}</span>
@@ -137,7 +138,7 @@ function OrderBookChart({ bids, asks, maxTotal }: {
             <div key={i} className="flex justify-between px-2 py-0.5 relative">
               <div 
                 className="absolute inset-y-0 left-0 bg-destructive/10" 
-                style={{ width: `${(ask.total / maxTotal) * 100}%` }} 
+                style={{ width: `${(ask.total / safeMax) * 100}%` }} 
               />
               <span className="text-destructive relative z-10">{ask.price.toFixed(2)}</span>
               <span className="relative z-10 font-mono">{ask.size.toLocaleString()}</span>

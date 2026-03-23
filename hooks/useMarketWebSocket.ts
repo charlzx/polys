@@ -199,6 +199,9 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
 
       const ws = new WebSocket(CLOB_WS);
       wsRef.current = ws;
+      // Reset liveness tracking so the watchdog fires correctly on each new connection
+      lastBookEventRef.current = null;
+      if (wsHealthTimerRef.current) { clearTimeout(wsHealthTimerRef.current); wsHealthTimerRef.current = null; }
 
       ws.onopen = () => {
         if (!mountedRef.current) {
