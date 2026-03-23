@@ -77,6 +77,22 @@ export async function fetchKalshiOrderbookServer(ticker: string): Promise<Kalshi
   return (data.orderbook as KalshiOrderBook) ?? null;
 }
 
+// Fetch Kalshi markets list from /markets endpoint (server-side)
+// Returns a flat list of actively-priced markets without event context.
+export async function fetchKalshiMarketsListServer(limit = 200): Promise<KalshiMarket[]> {
+  const url = new URL(`${BASE_URL}/markets`);
+  url.searchParams.set("limit", String(Math.min(limit, 200)));
+  url.searchParams.set("status", "active");
+
+  const res = await fetch(url.toString(), {
+    headers: { Accept: "application/json" },
+    next: { revalidate: 30 },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.markets as KalshiMarket[]) ?? [];
+}
+
 // Fetch up to 3 pages of Kalshi events with nested markets (server-side)
 export async function fetchKalshiEventsServer(): Promise<FlatKalshiMarket[]> {
   const allEvents: KalshiEvent[] = [];

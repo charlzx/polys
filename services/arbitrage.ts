@@ -25,9 +25,10 @@ export interface ArbitrageStat {
   value: string;
 }
 
-// Minimum spread (in probability units, 0–1) to flag as an opportunity
-const MIN_SPREAD = 0.03;
-// Maximum spread — larger gaps usually signal a bad keyword match, not real arb
+// Minimum spread (in probability units, 0–1) to flag as an opportunity.
+// Any positive edge qualifies; set low so the UI slider can do user-facing filtering.
+const MIN_SPREAD = 0.01;
+// Maximum spread — gaps above this almost always indicate a mismatched keyword pair
 const MAX_SPREAD = 0.15;
 // Jaccard similarity threshold for market title matching
 const MATCH_THRESHOLD = 0.18;
@@ -153,7 +154,12 @@ export function detectArbitrage(
   const opportunities: ArbitrageOpportunity[] = [];
 
   for (const kalshi of kalshiMarkets) {
-    const kTokens = tokenize(kalshi.eventTitle);
+    // Combine event title + market title for richer token coverage
+    const combinedTitle =
+      kalshi.eventTitle === kalshi.marketTitle
+        ? kalshi.eventTitle
+        : `${kalshi.eventTitle} ${kalshi.marketTitle}`;
+    const kTokens = tokenize(combinedTitle);
     let bestScore = MATCH_THRESHOLD;
     let bestPoly: TransformedMarket | null = null;
 
