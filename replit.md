@@ -1,4 +1,4 @@
-# PolyPro - Prediction Market Intelligence
+# Polys - Prediction Market Intelligence
 
 ## Project Overview
 A Next.js application for tracking odds, detecting arbitrage opportunities, and analyzing market sentiment across Polymarket, Kalshi, and more in real-time.

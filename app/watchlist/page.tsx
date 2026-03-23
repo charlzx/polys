@@ -23,7 +23,7 @@ import { AppHeader } from "@/components/AppHeader";
 function getWatchlist(): string[] {
   if (typeof window === 'undefined') return [];
   try {
-    return JSON.parse(localStorage.getItem("polypro-watchlist") || "[]");
+    return JSON.parse(localStorage.getItem("polys-watchlist") || "[]");
   } catch {
     return [];
   }
@@ -34,7 +34,7 @@ function toggleWatchlist(marketId: string): string[] {
   const updated = current.includes(marketId)
     ? current.filter((id) => id !== marketId)
     : [...current, marketId];
-  localStorage.setItem("polypro-watchlist", JSON.stringify(updated));
+  localStorage.setItem("polys-watchlist", JSON.stringify(updated));
   return updated;
 }
 
@@ -170,7 +170,7 @@ export default function WatchlistPage() {
     // Dispatch storage event for cross-component sync
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new StorageEvent('storage', {
-        key: 'polypro-watchlist',
+        key: 'polys-watchlist',
         newValue: JSON.stringify(updated),
       }));
     }
@@ -179,7 +179,7 @@ export default function WatchlistPage() {
   // Listen for watchlist changes from other components/tabs
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'polypro-watchlist' && e.newValue) {
+      if (e.key === 'polys-watchlist' && e.newValue) {
         try {
           setWatchlist(JSON.parse(e.newValue));
         } catch (error) {

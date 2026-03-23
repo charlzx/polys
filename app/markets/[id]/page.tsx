@@ -241,7 +241,7 @@ function OrderBookChart({ bids, asks, maxTotal }: {
 function getWatchlist(): string[] {
   if (typeof window === 'undefined') return [];
   try {
-    return JSON.parse(localStorage.getItem("polypro-watchlist") || "[]");
+    return JSON.parse(localStorage.getItem("polys-watchlist") || "[]");
   } catch {
     return [];
   }
@@ -252,7 +252,7 @@ function toggleWatchlist(marketId: string): string[] {
   const updated = current.includes(marketId)
     ? current.filter((id) => id !== marketId)
     : [...current, marketId];
-  localStorage.setItem("polypro-watchlist", JSON.stringify(updated));
+  localStorage.setItem("polys-watchlist", JSON.stringify(updated));
   return updated;
 }
 
@@ -381,7 +381,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                 // Dispatch storage event for cross-component sync
                 if (typeof window !== 'undefined') {
                   window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'polypro-watchlist',
+                    key: 'polys-watchlist',
                     newValue: JSON.stringify(getWatchlist()),
                   }));
                 }

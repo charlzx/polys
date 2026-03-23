@@ -466,7 +466,7 @@ function SettingsContent() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-body">Theme</CardTitle>
-                <CardDescription>Customize how PolyPro looks</CardDescription>
+                <CardDescription>Customize how Polys looks</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <button

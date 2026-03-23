@@ -25,7 +25,7 @@ export default function LoginPage() {
 
     // Get return URL before login
     const returnUrl = typeof window !== 'undefined' 
-      ? sessionStorage.getItem('polypro-return-url') || '/dashboard'
+      ? sessionStorage.getItem('polys-return-url') || '/dashboard'
       : '/dashboard';
 
     // Simulate login - set mock user
@@ -39,7 +39,7 @@ export default function LoginPage() {
       
       // Clear return URL
       if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('polypro-return-url');
+        sessionStorage.removeItem('polys-return-url');
       }
       
       setIsLoading(false);
@@ -52,7 +52,7 @@ export default function LoginPage() {
     
     // Get return URL
     const returnUrl = typeof window !== 'undefined' 
-      ? sessionStorage.getItem('polypro-return-url') || '/dashboard'
+      ? sessionStorage.getItem('polys-return-url') || '/dashboard'
       : '/dashboard';
     
     // Simulate social login
@@ -65,7 +65,7 @@ export default function LoginPage() {
     
     // Clear return URL
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('polypro-return-url');
+      sessionStorage.removeItem('polys-return-url');
     }
     
     setTimeout(() => {
@@ -83,7 +83,7 @@ export default function LoginPage() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <span className="text-title font-bold">
-              Poly<span className="text-primary">Pro</span>
+              Polys
             </span>
           </Link>
 
@@ -173,9 +173,7 @@ export default function LoginPage() {
         {/* Mobile Header */}
         <header className="lg:hidden h-16 flex items-center px-4 border-b border-border/50">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-subtitle font-bold">
-              Poly<span className="text-primary">Pro</span>
-            </span>
+            <span className="text-subtitle font-bold">Polys</span>
           </Link>
         </header>
 
@@ -190,7 +188,7 @@ export default function LoginPage() {
               {/* Header */}
               <div className="space-y-2">
                 <h2 className="text-title font-bold">Welcome back</h2>
-                <p className="text-body text-muted-foreground">Sign in to your PolyPro account</p>
+                <p className="text-body text-muted-foreground">Sign in to your Polys account</p>
               </div>
 
               {/* Social Login Buttons */}

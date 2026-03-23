@@ -75,7 +75,7 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
               <span className="text-primary-foreground text-small font-bold">P</span>
             </div>
-            <span className="text-subtitle font-bold hidden sm:inline">PolyPro</span>
+            <span className="text-subtitle font-bold hidden sm:inline">Polys</span>
           </Link>
 
           {/* Nav Links */}

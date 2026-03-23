@@ -17,7 +17,7 @@ function getInitialAuthState(): { user: User | null; isAuthenticated: boolean } 
   }
   
   try {
-    const mockUser = localStorage.getItem("polypro-mock-user");
+    const mockUser = localStorage.getItem("polys-mock-user");
     if (mockUser) {
       const userData = JSON.parse(mockUser);
       return { user: userData, isAuthenticated: true };
@@ -42,14 +42,14 @@ export function useAuth() {
 
   const login = useCallback((userData: User) => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem("polypro-mock-user", JSON.stringify(userData));
+      localStorage.setItem("polys-mock-user", JSON.stringify(userData));
     }
     setAuthState({ user: userData, isAuthenticated: true });
   }, []);
 
   const logout = useCallback(() => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem("polypro-mock-user");
+      localStorage.removeItem("polys-mock-user");
     }
     setAuthState({ user: null, isAuthenticated: false });
   }, []);

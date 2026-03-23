@@ -26,7 +26,7 @@ export default function SignupPage() {
 
     // Get return URL
     const returnUrl = typeof window !== 'undefined' 
-      ? sessionStorage.getItem('polypro-return-url') || '/dashboard'
+      ? sessionStorage.getItem('polys-return-url') || '/dashboard'
       : '/dashboard';
 
     // Simulate signup - set mock user
@@ -40,7 +40,7 @@ export default function SignupPage() {
       
       // Clear return URL
       if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('polypro-return-url');
+        sessionStorage.removeItem('polys-return-url');
       }
       
       setIsLoading(false);
@@ -53,7 +53,7 @@ export default function SignupPage() {
     
     // Get return URL
     const returnUrl = typeof window !== 'undefined' 
-      ? sessionStorage.getItem('polypro-return-url') || '/dashboard'
+      ? sessionStorage.getItem('polys-return-url') || '/dashboard'
       : '/dashboard';
     
     // Simulate social signup
@@ -66,7 +66,7 @@ export default function SignupPage() {
     
     // Clear return URL
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('polypro-return-url');
+      sessionStorage.removeItem('polys-return-url');
     }
     
     setTimeout(() => {
@@ -84,7 +84,7 @@ export default function SignupPage() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <span className="text-title font-bold">
-              Poly<span className="text-primary">Pro</span>
+              Polys
             </span>
           </Link>
 
@@ -101,7 +101,7 @@ export default function SignupPage() {
                 in prediction markets.
               </h1>
               <p className="text-subtitle text-muted-foreground max-w-lg">
-                Join thousands of traders using PolyPro to stay ahead of the market.
+                Join thousands of traders using Polys to stay ahead of the market.
               </p>
             </motion.div>
 
@@ -174,9 +174,7 @@ export default function SignupPage() {
         {/* Mobile Header */}
         <header className="lg:hidden h-16 flex items-center px-4 border-b border-border/50">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-subtitle font-bold">
-              Poly<span className="text-primary">Pro</span>
-            </span>
+            <span className="text-subtitle font-bold">Polys</span>
           </Link>
         </header>
 
@@ -191,7 +189,7 @@ export default function SignupPage() {
               {/* Header */}
               <div className="space-y-2">
                 <h2 className="text-title font-bold">Create your account</h2>
-                <p className="text-body text-muted-foreground">Get started with PolyPro</p>
+                <p className="text-body text-muted-foreground">Get started with Polys</p>
               </div>
 
               {/* Social Login Buttons */}

@@ -34,9 +34,7 @@ export function Footer() {
           {/* Brand */}
           <div className="col-span-2">
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <span className="text-subtitle font-bold">
-                Poly<span className="text-primary">Pro</span>
-              </span>
+              <span className="text-subtitle font-bold">Polys</span>
             </Link>
             <p className="text-small text-muted-foreground mb-6 max-w-xs">
               Real-time prediction market analytics. Track odds, detect arbitrage, and make data-driven decisions.
@@ -116,7 +114,7 @@ export function Footer() {
         {/* Bottom bar */}
         <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-caption text-muted-foreground">
-            {currentYear} PolyPro. All rights reserved.
+            {currentYear} Polys. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-caption text-muted-foreground">
             <span>Built for traders, by traders</span>
