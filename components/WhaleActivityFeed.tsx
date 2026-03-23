@@ -8,8 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useWhaleActivity, type ActivityEvent } from "@/hooks/useWhales";
 import { formatDollar, shortAddress } from "@/services/whales";
 
-function relativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
+function relativeTime(ts: string): string {
+  const diffMs = Date.now() - new Date(ts).getTime();
   const mins = Math.floor(diffMs / 60_000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
@@ -19,7 +19,7 @@ function relativeTime(iso: string): string {
 }
 
 function ActivityRow({ event }: { event: ActivityEvent }) {
-  const isBuy = event.action === "BUY";
+  const isBuy = event.side === "BUY";
 
   return (
     <motion.div
@@ -27,10 +27,10 @@ function ActivityRow({ event }: { event: ActivityEvent }) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors"
+      className="flex items-start gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors"
     >
       <div
-        className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full ${
+        className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full mt-0.5 ${
           isBuy ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"
         }`}
       >
@@ -42,26 +42,23 @@ function ActivityRow({ event }: { event: ActivityEvent }) {
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+          <Link
+            href={`/whales/${event.proxyWallet}`}
+            className="text-caption font-mono text-primary hover:underline"
+          >
+            {shortAddress(event.proxyWallet)}
+          </Link>
           <span className={`text-small font-semibold ${isBuy ? "text-success" : "text-destructive"}`}>
             {isBuy ? "BUY" : "SELL"}
           </span>
           <Badge variant="outline" className="text-caption px-1.5 py-0">
             {event.outcome}
           </Badge>
-          <span className="text-small font-medium">{formatDollar(event.size)}</span>
-          <span className="text-caption text-muted-foreground">@ {event.price}¢</span>
+          <span className="text-small font-medium">{formatDollar(event.amount)}</span>
         </div>
-        <Link
-          href={`/markets/${event.marketId}`}
-          className="text-caption text-muted-foreground hover:text-foreground transition-colors line-clamp-1 mt-0.5"
-        >
-          {event.marketName}
-        </Link>
-      </div>
-
-      <div className="text-caption text-muted-foreground shrink-0 text-right">
-        {relativeTime(event.timestamp)}
+        <p className="text-caption text-muted-foreground line-clamp-1">{event.title}</p>
+        <p className="text-caption text-muted-foreground mt-0.5">{relativeTime(event.timestamp)}</p>
       </div>
     </motion.div>
   );
@@ -79,6 +76,8 @@ export function WhaleActivityFeed({
   className = "",
 }: WhaleActivityFeedProps) {
   const { data, isLoading, isError } = useWhaleActivity(limit);
+
+  const hasActivity = (data?.activity?.length ?? 0) > 0;
 
   return (
     <div className={className}>
@@ -102,7 +101,7 @@ export function WhaleActivityFeed({
       {isLoading ? (
         <div className="space-y-2">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="flex items-center gap-3 p-3">
+            <div key={i} className="flex items-start gap-3 p-3">
               <Skeleton className="h-8 w-8 rounded-full shrink-0" />
               <div className="flex-1 space-y-1.5">
                 <Skeleton className="h-3 w-3/4" />
@@ -113,19 +112,18 @@ export function WhaleActivityFeed({
         </div>
       ) : isError ? (
         <p className="text-small text-muted-foreground p-3">Failed to load activity.</p>
-      ) : (
+      ) : hasActivity ? (
         <div className="space-y-0.5">
           <AnimatePresence initial={false}>
             {(data?.activity ?? []).slice(0, limit).map((event) => (
               <ActivityRow key={event.id} event={event} />
             ))}
           </AnimatePresence>
-          {(data?.activity ?? []).length === 0 && (
-            <p className="text-small text-muted-foreground p-3 text-center">
-              No recent whale activity detected.
-            </p>
-          )}
         </div>
+      ) : (
+        <p className="text-small text-muted-foreground p-4 text-center">
+          No large trades found from tracked wallets at this time.
+        </p>
       )}
     </div>
   );

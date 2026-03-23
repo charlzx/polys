@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -8,8 +8,8 @@ import { AppHeader } from "@/components/AppHeader";
 import { WhaleActivityFeed } from "@/components/WhaleActivityFeed";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useAuth } from "@/hooks/useAuth";
-import { useWhaleSummary } from "@/hooks/useWhales";
-import { formatDollar } from "@/services/whales";
+import { useWhalesLeaderboard } from "@/hooks/useWhales";
+import { formatDollar, shortAddress } from "@/services/whales";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,35 +17,136 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Eye,
-  TrendUpIcon,
-  TrendDownIcon,
   MagnifyingGlass,
   ArrowRight,
   Sparkle,
-  Lightning,
-  CurrencyDollar,
-  Drop,
+  TrendUpIcon,
+  TrendDownIcon,
+  ChartBar,
+  ArrowUpRight,
 } from "@phosphor-icons/react";
 
 const FREE_LIMIT = 5;
 
-function formatChange(n: number): string {
-  return `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
+function relativeTime(ts: string | null): string {
+  if (!ts) return "—";
+  const diffMs = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
-function MarketSkeleton() {
+function WhaleSkeleton() {
   return (
     <Card>
       <CardContent className="p-4">
-        <Skeleton className="h-4 w-3/4 mb-2" />
-        <Skeleton className="h-3 w-1/2 mb-3" />
-        <div className="flex gap-4">
-          <Skeleton className="h-10 w-20" />
-          <Skeleton className="h-10 w-20" />
-          <Skeleton className="h-10 w-24 ml-auto" />
+        <div className="flex items-center justify-between mb-3">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-6 w-16" />
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12" />)}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function WhaleCard({
+  whale,
+  rank,
+}: {
+  whale: {
+    address: string;
+    portfolioValue: number;
+    totalVolume: number;
+    winRate: number;
+    openPositions: number;
+    recentTrades: number;
+    lastActive: string | null;
+    hasData: boolean;
+  };
+  rank: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: rank * 0.04 }}
+    >
+      <Link href={`/whales/${whale.address}`}>
+        <Card className="hover:border-primary/30 transition-colors cursor-pointer group">
+          <CardContent className="p-4">
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-caption text-muted-foreground font-mono shrink-0">
+                  #{rank}
+                </span>
+                <span className="text-small font-mono font-medium truncate">
+                  {shortAddress(whale.address)}
+                </span>
+                {!whale.hasData && (
+                  <Badge variant="outline" className="text-caption px-1.5 py-0 shrink-0">
+                    No data
+                  </Badge>
+                )}
+              </div>
+              <ArrowUpRight
+                weight="bold"
+                className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0"
+              />
+            </div>
+
+            {/* Metrics grid */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="p-2 rounded bg-secondary/50 text-center">
+                <div className="text-caption text-muted-foreground mb-0.5">Portfolio</div>
+                <div className="text-small font-bold">
+                  {whale.portfolioValue > 0 ? formatDollar(whale.portfolioValue) : "—"}
+                </div>
+              </div>
+              <div className="p-2 rounded bg-secondary/50 text-center">
+                <div className="text-caption text-muted-foreground mb-0.5">30d Volume</div>
+                <div className="text-small font-bold">
+                  {whale.totalVolume > 0 ? formatDollar(whale.totalVolume) : "—"}
+                </div>
+              </div>
+              <div className="p-2 rounded bg-secondary/50 text-center">
+                <div className="text-caption text-muted-foreground mb-0.5">Win Rate</div>
+                <div className={`text-small font-bold flex items-center justify-center gap-0.5 ${
+                  whale.winRate >= 50 ? "text-success" : whale.winRate > 0 ? "text-destructive" : ""
+                }`}>
+                  {whale.winRate > 0 ? (
+                    <>
+                      {whale.winRate >= 50 ? <TrendUpIcon className="h-3 w-3" /> : <TrendDownIcon className="h-3 w-3" />}
+                      {whale.winRate}%
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </div>
+              </div>
+              <div className="p-2 rounded bg-secondary/50 text-center">
+                <div className="text-caption text-muted-foreground mb-0.5">Open Pos.</div>
+                <div className="text-small font-bold">
+                  {whale.openPositions > 0 ? whale.openPositions : "—"}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between mt-2 text-caption text-muted-foreground">
+              <span>{whale.recentTrades > 0 ? `${whale.recentTrades} recent trades` : "No recent trades"}</span>
+              <span>Last active: {relativeTime(whale.lastActive)}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+    </motion.div>
   );
 }
 
@@ -56,15 +157,11 @@ export default function WhalesPage() {
   const { user } = useAuth();
   const isPro = user?.tier === "pro" || user?.tier === "premium";
 
-  const { data, isLoading, isError } = useWhaleSummary(20);
+  const { data, isLoading, isError } = useWhalesLeaderboard(10);
 
-  const displayMarkets = useMemo(() => {
-    if (!data?.markets) return [];
-    const visible = isPro ? data.markets : data.markets.slice(0, FREE_LIMIT);
-    return visible;
-  }, [data, isPro]);
-
-  const hiddenCount = (data?.markets?.length ?? 0) - displayMarkets.length;
+  const allWhales = data?.whales ?? [];
+  const displayWhales = isPro ? allWhales : allWhales.slice(0, FREE_LIMIT);
+  const hiddenCount = allWhales.length - displayWhales.length;
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,65 +196,27 @@ export default function WhalesPage() {
               <h1 className="text-title md:text-display font-bold">Whale Tracker</h1>
             </div>
             <p className="text-muted-foreground text-small">
-              Track large-volume market activity and monitor smart money movements on Polymarket.
+              Monitor large Polymarket wallets — see their positions, trade history, and recent activity.
             </p>
           </motion.div>
-
-          {/* Summary Stats */}
-          {data && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-              className="grid grid-cols-2 md:grid-cols-3 gap-4"
-            >
-              <Card>
-                <CardContent className="p-4">
-                  <CurrencyDollar weight="duotone" className="h-5 w-5 text-muted-foreground mb-2" />
-                  <div className="text-title font-bold">{formatDollar(data.totalVolume24h)}</div>
-                  <div className="text-small text-muted-foreground">24h Volume</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <Drop weight="duotone" className="h-5 w-5 text-muted-foreground mb-2" />
-                  <div className="text-title font-bold">{formatDollar(data.totalLiquidity)}</div>
-                  <div className="text-small text-muted-foreground">Total Liquidity</div>
-                </CardContent>
-              </Card>
-              {data.largestMove && (
-                <Card className="col-span-2 md:col-span-1">
-                  <CardContent className="p-4">
-                    <Lightning weight="duotone" className="h-5 w-5 text-muted-foreground mb-2" />
-                    <div className={`text-title font-bold ${data.largestMove.change >= 0 ? "text-success" : "text-destructive"}`}>
-                      {formatChange(data.largestMove.change)}
-                    </div>
-                    <div className="text-caption text-muted-foreground line-clamp-1">
-                      {data.largestMove.market}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </motion.div>
-          )}
 
           {/* Wallet Lookup */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.15 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
           >
             <Card>
               <CardContent className="p-4 md:p-5">
-                <p className="text-small font-medium mb-3">Lookup a wallet address</p>
+                <p className="text-small font-medium mb-3">Look up any Polymarket wallet</p>
                 <form onSubmit={handleSearchSubmit} className="flex gap-2">
                   <div className="relative flex-1">
                     <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      placeholder="0x... Polymarket wallet address"
-                      className="pl-9"
+                      placeholder="0x... Polymarket proxy wallet address"
+                      className="pl-9 font-mono text-small"
                       aria-label="Wallet address"
                     />
                   </div>
@@ -172,94 +231,39 @@ export default function WhalesPage() {
 
           {/* Main Grid */}
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Market Activity Table */}
-            <div className="lg:col-span-2 space-y-4">
+            {/* Whale Leaderboard */}
+            <div className="lg:col-span-2 space-y-3">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.2 }}
+                transition={{ duration: 0.4, delay: 0.15 }}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-subtitle font-semibold">Top Markets by Whale Volume</h2>
+                  <div className="flex items-center gap-2">
+                    <ChartBar weight="duotone" className="h-5 w-5 text-primary" />
+                    <h2 className="text-subtitle font-semibold">Top Tracked Wallets</h2>
+                  </div>
                   {!isPro && (
                     <Badge variant="secondary" className="text-caption gap-1">
                       <Sparkle weight="fill" className="h-3 w-3 text-primary" />
-                      Pro unlocks all
+                      Pro: full list
                     </Badge>
                   )}
                 </div>
 
                 <div className="space-y-3">
                   {isLoading ? (
-                    [...Array(5)].map((_, i) => <MarketSkeleton key={i} />)
+                    [...Array(5)].map((_, i) => <WhaleSkeleton key={i} />)
                   ) : isError ? (
                     <Card>
                       <CardContent className="p-6 text-center text-muted-foreground text-small">
-                        Failed to load whale data.
+                        Failed to load whale data. Try again later.
                       </CardContent>
                     </Card>
                   ) : (
                     <>
-                      {displayMarkets.map((market, index) => (
-                        <motion.div
-                          key={market.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3, delay: 0.05 * index }}
-                        >
-                          <Link href={`/markets/${market.id}`}>
-                            <Card className="hover:border-primary/30 transition-colors cursor-pointer">
-                              <CardContent className="p-4">
-                                <div className="flex items-start justify-between gap-3 mb-3">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="text-caption text-muted-foreground font-mono">
-                                        #{index + 1}
-                                      </span>
-                                      <Badge variant="outline" className="text-caption px-1.5 py-0">
-                                        {market.category}
-                                      </Badge>
-                                    </div>
-                                    <p className="text-small font-medium line-clamp-2">
-                                      {market.name}
-                                    </p>
-                                  </div>
-                                  <div className={`text-small font-semibold shrink-0 flex items-center gap-1 ${
-                                    market.priceChange24h >= 0 ? "text-success" : "text-destructive"
-                                  }`}>
-                                    {market.priceChange24h >= 0 ? (
-                                      <TrendUpIcon className="h-3.5 w-3.5" />
-                                    ) : (
-                                      <TrendDownIcon className="h-3.5 w-3.5" />
-                                    )}
-                                    {formatChange(market.priceChange24h)}
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-2 text-center">
-                                  <div className="p-2 rounded bg-success/10">
-                                    <div className="text-caption text-muted-foreground mb-0.5">YES</div>
-                                    <div className="text-small font-bold text-success">
-                                      {market.yesPrice}¢
-                                    </div>
-                                  </div>
-                                  <div className="p-2 rounded bg-destructive/10">
-                                    <div className="text-caption text-muted-foreground mb-0.5">NO</div>
-                                    <div className="text-small font-bold text-destructive">
-                                      {market.noPrice}¢
-                                    </div>
-                                  </div>
-                                  <div className="p-2 rounded bg-secondary/50">
-                                    <div className="text-caption text-muted-foreground mb-0.5">Vol 24h</div>
-                                    <div className="text-small font-bold">
-                                      {formatDollar(market.volume24h)}
-                                    </div>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </Link>
-                        </motion.div>
+                      {displayWhales.map((whale, index) => (
+                        <WhaleCard key={whale.address} whale={whale} rank={index + 1} />
                       ))}
 
                       {hiddenCount > 0 && (
@@ -267,17 +271,17 @@ export default function WhalesPage() {
                           <CardContent className="p-6">
                             <div className="filter blur-sm space-y-3 pointer-events-none">
                               {[...Array(Math.min(hiddenCount, 3))].map((_, i) => (
-                                <div key={i} className="h-16 rounded bg-secondary/50" />
+                                <div key={i} className="h-20 rounded bg-secondary/50" />
                               ))}
                             </div>
                             <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-[2px]">
                               <div className="text-center p-4">
                                 <Sparkle weight="fill" className="h-6 w-6 text-primary mx-auto mb-2" />
                                 <p className="text-small font-medium mb-2">
-                                  {hiddenCount} more markets hidden
+                                  {hiddenCount} more wallets hidden
                                 </p>
                                 <p className="text-caption text-muted-foreground mb-3">
-                                  Upgrade to Pro to see all whale activity
+                                  Upgrade to Pro for the full leaderboard
                                 </p>
                                 <Button size="sm" asChild>
                                   <Link href="/pricing">View Plans</Link>
@@ -298,11 +302,11 @@ export default function WhalesPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.25 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
               >
                 <Card>
                   <CardHeader className="p-4 pb-0">
-                    <CardTitle className="text-subtitle">Live Activity</CardTitle>
+                    <CardTitle className="text-subtitle">Large Trades (&gt;$1k)</CardTitle>
                   </CardHeader>
                   <CardContent className="p-4">
                     <WhaleActivityFeed limit={12} showHeader={false} />

@@ -2,51 +2,47 @@ import { useQuery } from "@tanstack/react-query";
 
 const WHALES_API = "/api/whales";
 
-export interface WhaleMarket {
-  id: string;
-  slug: string;
-  name: string;
-  category: string;
-  volume24h: number;
+export interface WhaleEntry {
+  address: string;
+  portfolioValue: number;
   totalVolume: number;
-  yesPrice: number;
-  noPrice: number;
-  priceChange24h: number;
-  liquidity: number;
-  image?: string | null;
-  endDate?: string | null;
-  lastActivity: string;
+  winRate: number;
+  openPositions: number;
+  recentTrades: number;
+  recentTradesList: Array<{
+    title: string;
+    side: string;
+    outcome: string;
+    amount: number;
+    timestamp: string;
+  }>;
+  lastActive: string | null;
+  hasData: boolean;
 }
 
-export interface WhalesSummary {
-  markets: WhaleMarket[];
-  totalVolume24h: number;
-  totalLiquidity: number;
-  largestMove: { market: string; change: number } | null;
+export interface WhalesLeaderboard {
+  whales: WhaleEntry[];
 }
 
 export interface ActivityEvent {
   id: string;
-  marketId: string;
-  marketName: string;
-  marketSlug: string;
-  category: string;
-  action: "BUY" | "SELL";
+  proxyWallet: string;
+  title: string;
+  side: "BUY" | "SELL";
   outcome: "YES" | "NO";
-  size: number;
+  amount: number;
   price: number;
   timestamp: string;
-  image?: string | null;
 }
 
 export interface ActivityResponse {
   activity: ActivityEvent[];
-  source: "user" | "markets";
+  source: "user" | "wallets";
 }
 
-async function fetchWhaleSummary(limit: number): Promise<WhalesSummary> {
+async function fetchWhalesLeaderboard(limit: number): Promise<WhalesLeaderboard> {
   const res = await fetch(`${WHALES_API}?limit=${limit}`);
-  if (!res.ok) throw new Error("Failed to fetch whale data");
+  if (!res.ok) throw new Error("Failed to fetch whale leaderboard");
   return res.json();
 }
 
@@ -58,10 +54,10 @@ async function fetchWhaleActivity(limit: number, address?: string): Promise<Acti
   return res.json();
 }
 
-export function useWhaleSummary(limit = 20) {
-  return useQuery<WhalesSummary>({
-    queryKey: ["whale-summary", limit],
-    queryFn: () => fetchWhaleSummary(limit),
+export function useWhalesLeaderboard(limit = 10) {
+  return useQuery<WhalesLeaderboard>({
+    queryKey: ["whales-leaderboard", limit],
+    queryFn: () => fetchWhalesLeaderboard(limit),
     staleTime: 30_000,
     refetchInterval: 30_000,
   });
