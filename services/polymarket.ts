@@ -50,7 +50,6 @@ interface GammaMarket {
   lastTradePrice?: string | number;
   oneDayPriceChange?: string | number;
   events?: Array<{ title?: string; slug?: string; ticker?: string; category?: string }>;
-  tags?: Array<{ id: string; label: string }>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -395,6 +394,73 @@ export function usePriceHistory(
     queryFn: () => fetchPriceHistory(tokenId!, timeframe),
     enabled: !!tokenId,
     staleTime: 5 * 60_000,
+    retry: 1,
+  });
+}
+
+// ─── Order Book ───────────────────────────────────────────────────────────────
+
+export interface OrderBookLevel {
+  price: number;
+  size: number;
+  total: number;
+}
+
+export interface OrderBook {
+  bids: OrderBookLevel[];
+  asks: OrderBookLevel[];
+  maxTotal: number;
+  timestamp: number;
+}
+
+async function fetchOrderbook(tokenId: string): Promise<OrderBook | null> {
+  try {
+    const res = await fetch(`/api/orderbook?token_id=${encodeURIComponent(tokenId)}`);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const rawBids: Array<{ price: string; size: string }> = data.bids ?? [];
+    const rawAsks: Array<{ price: string; size: string }> = data.asks ?? [];
+
+    // Sort and compute running totals
+    const sortedBids = [...rawBids]
+      .sort((a, b) => parseFloat(b.price) - parseFloat(a.price))
+      .slice(0, 8);
+
+    const sortedAsks = [...rawAsks]
+      .sort((a, b) => parseFloat(a.price) - parseFloat(b.price))
+      .slice(0, 8);
+
+    let bidTotal = 0;
+    const bids: OrderBookLevel[] = sortedBids.map((b) => {
+      bidTotal += parseFloat(b.size);
+      return { price: parseFloat(b.price), size: Math.round(parseFloat(b.size)), total: bidTotal };
+    });
+
+    let askTotal = 0;
+    const asks: OrderBookLevel[] = sortedAsks.map((a) => {
+      askTotal += parseFloat(a.size);
+      return { price: parseFloat(a.price), size: Math.round(parseFloat(a.size)), total: askTotal };
+    });
+
+    return {
+      bids,
+      asks: asks.reverse(),
+      maxTotal: Math.max(bidTotal, askTotal),
+      timestamp: data.timestamp ? parseInt(data.timestamp) : Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function useOrderbook(tokenId: string | undefined) {
+  return useQuery({
+    queryKey: ["orderbook", tokenId],
+    queryFn: () => fetchOrderbook(tokenId!),
+    enabled: !!tokenId,
+    staleTime: 5_000,
+    refetchInterval: 10_000,
     retry: 1,
   });
 }

@@ -222,8 +222,17 @@ export default function DashboardPage() {
   const { data: markets, isLoading, error, refetch } = useMarkets({ limit: 5, active: true });
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
 
-  const marketIds = useMemo(() => markets?.map((m) => m.id) ?? [], [markets]);
-  const { isConnected, applyUpdatesToMarkets } = useMarketWebSocket({ marketIds });
+  const tokenPairs = useMemo(
+    () =>
+      (markets ?? [])
+        .filter((m) => m.yesTokenId)
+        .map((m) => ({ marketId: m.id, yesTokenId: m.yesTokenId! })),
+    [markets]
+  );
+  const { isConnected, applyUpdatesToMarkets } = useMarketWebSocket({
+    tokenPairs,
+    marketIds: markets?.map((m) => m.id) ?? [],
+  });
 
   const liveMarkets = useMemo(
     () => (markets ? applyUpdatesToMarkets(markets) : []),

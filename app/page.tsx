@@ -277,21 +277,21 @@ export default function LandingPage() {
   // Fetch market data
   const { data: markets, isLoading } = useMarkets({ limit: 20, active: true });
 
-  // Get market IDs for WebSocket
-  const marketIds = useMemo(() => markets?.map((m) => m.id) || [], [markets]);
+  // Build token pairs for real CLOB WebSocket updates
+  const tokenPairs = useMemo(
+    () =>
+      (markets ?? [])
+        .filter((m) => m.yesTokenId)
+        .map((m) => ({ marketId: m.id, yesTokenId: m.yesTokenId! })),
+    [markets]
+  );
 
-  // Real-time updates
-  const { isConnected, applyUpdatesToMarkets, initializeMarket } = useMarketWebSocket({
-    marketIds,
-    enabled: marketIds.length > 0,
+  // Real-time updates via CLOB WebSocket when token pairs are available
+  const { isConnected, applyUpdatesToMarkets } = useMarketWebSocket({
+    tokenPairs,
+    marketIds: markets?.map((m) => m.id) ?? [],
+    enabled: (markets?.length ?? 0) > 0,
   });
-
-  // Initialize markets
-  useEffect(() => {
-    if (markets) {
-      markets.forEach((m) => initializeMarket(m.id, m.yesOdds, m.volume24h));
-    }
-  }, [markets, initializeMarket]);
 
   // Apply live updates
   const liveMarkets = useMemo(() => {

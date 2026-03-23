@@ -22,7 +22,9 @@ import {
   ChartBar,
   ChartLine,
 } from "@phosphor-icons/react";
-import { useMarket, usePriceHistory } from "@/services/polymarket";
+import { useMarket, usePriceHistory, useOrderbook } from "@/services/polymarket";
+import { useSingleMarketWebSocket } from "@/hooks/useMarketWebSocket";
+import type { LiveTrade } from "@/hooks/useMarketWebSocket";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { AppHeader } from "@/components/AppHeader";
 import {
@@ -37,93 +39,6 @@ import {
   Bar,
   Cell,
 } from "recharts";
-
-// Generate realistic historical data with trend patterns
-function generateHistoricalData(currentYes: number, days: number) {
-  const data = [];
-  const now = new Date();
-  
-  let yes = currentYes + (Math.random() - 0.5) * 30;
-  yes = Math.max(10, Math.min(90, yes));
-  
-  const trendStrength = (currentYes - yes) / days;
-  
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    
-    const trend = trendStrength;
-    const noise = (Math.random() - 0.5) * 4;
-    const meanReversion = (50 - yes) * 0.02;
-    
-    yes += trend + noise + meanReversion;
-    yes = Math.max(5, Math.min(95, yes));
-    
-    const dayVolatility = 2 + Math.random() * 3;
-    const high = Math.min(95, yes + dayVolatility);
-    const low = Math.max(5, yes - dayVolatility);
-    
-    data.push({
-      date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      yes: Math.round(yes * 10) / 10,
-      no: Math.round((100 - yes) * 10) / 10,
-      high: Math.round(high * 10) / 10,
-      low: Math.round(low * 10) / 10,
-      volume: Math.floor(50000 + Math.random() * 200000),
-    });
-  }
-
-  if (data.length > 0) {
-    data[data.length - 1].yes = currentYes;
-    data[data.length - 1].no = 100 - currentYes;
-  }
-
-  return data;
-}
-
-// Generate order book data
-function generateOrderBook(currentYes: number) {
-  const bids: { price: number; size: number; total: number }[] = [];
-  const asks: { price: number; size: number; total: number }[] = [];
-  
-  const yesPrice = currentYes / 100;
-  let bidTotal = 0;
-  let askTotal = 0;
-  
-  for (let i = 0; i < 8; i++) {
-    const price = Math.max(0.01, yesPrice - 0.01 - i * 0.02);
-    const size = Math.floor(500 + Math.random() * 2000 * (1 + i * 0.3));
-    bidTotal += size;
-    bids.push({ price: Math.round(price * 100) / 100, size, total: bidTotal });
-  }
-  
-  for (let i = 0; i < 8; i++) {
-    const price = Math.min(0.99, yesPrice + 0.01 + i * 0.02);
-    const size = Math.floor(500 + Math.random() * 2000 * (1 + i * 0.3));
-    askTotal += size;
-    asks.push({ price: Math.round(price * 100) / 100, size, total: askTotal });
-  }
-  
-  return { bids, asks: asks.reverse(), maxTotal: Math.max(bidTotal, askTotal) };
-}
-
-// Generate recent trades
-function generateMockTrades() {
-  const sides = ["Buy YES", "Sell YES", "Buy NO", "Sell NO"];
-  const now = new Date();
-  
-  return [...Array(12)].map((_, i) => ({
-    id: i + 1,
-    time: new Date(now.getTime() - i * 8 * 60000).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    side: sides[Math.floor(Math.random() * sides.length)],
-    price: (0.30 + Math.random() * 0.50).toFixed(2),
-    quantity: Math.floor(Math.random() * 800) + 100,
-    total: (50 + Math.random() * 300).toFixed(2),
-  }));
-}
 
 // Volatility indicator component
 function VolatilityIndicator({ level, momentum }: { level: 'low' | 'medium' | 'high'; momentum: 'bullish' | 'bearish' | 'neutral' }) {
@@ -263,32 +178,25 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
   const [isWatched, setIsWatched] = useState(() => getWatchlist().includes(id));
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
 
-  // Fetch real price history from CLOB API; fall back to generated data if unavailable
+  // Live WebSocket data (real CLOB connection when yesTokenId available)
+  const { volatility, momentum, liveOrderBook, liveTrades } = useSingleMarketWebSocket(
+    id,
+    market?.yesOdds,
+    market?.yesTokenId
+  );
+
+  // Fetch real price history from CLOB API
   const { data: realHistory } = usePriceHistory(market?.yesTokenId, timeframe);
 
+  // Fetch real order book from CLOB REST API; prefer live WebSocket snapshot
+  const { data: restOrderBook } = useOrderbook(market?.yesTokenId);
+  const orderBook = liveOrderBook ?? restOrderBook ?? { bids: [], asks: [], maxTotal: 0 };
+
+  // Price history: use real CLOB data or show empty (no random fallback)
   const chartData = useMemo(() => {
     if (!market) return [];
-    if (realHistory && realHistory.length > 0) return realHistory;
-    const days =
-      timeframe === "24H" ? 1
-      : timeframe === "7D" ? 7
-      : timeframe === "30D" ? 30
-      : timeframe === "3M" ? 90
-      : 365;
-    return generateHistoricalData(market.yesOdds, days);
-  }, [market, timeframe, realHistory]);
-
-  // Generate order book
-  const orderBook = useMemo(() => {
-    if (!market) return { bids: [], asks: [], maxTotal: 0 };
-    return generateOrderBook(market.yesOdds);
-  }, [market]);
-
-  const trades = useMemo(() => generateMockTrades(), []);
-
-  // Mock volatility data
-  const volatility: 'low' | 'medium' | 'high' = 'medium';
-  const momentum: 'bullish' | 'bearish' | 'neutral' = market && market.change24h > 0 ? 'bullish' : market && market.change24h < 0 ? 'bearish' : 'neutral';
+    return realHistory && realHistory.length > 0 ? realHistory : [];
+  }, [market, realHistory]);
 
   // Show loading while checking auth
   if (!shouldShowContent) {
@@ -478,75 +386,77 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="yesGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="oklch(45% 0.15 145)" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="oklch(45% 0.15 145)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fill: "currentColor", fontSize: 11 }}
-                        className="text-muted-foreground"
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis
-                        domain={[0, 100]}
-                        tick={{ fill: "currentColor", fontSize: 11 }}
-                        className="text-muted-foreground"
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(v) => `${v}%`}
-                      />
-                      <Tooltip
-                        content={({ active, payload, label }) => {
-                          if (!active || !payload?.length) return null;
-                          const data = payload[0]?.payload;
-                          return (
-                            <div className="bg-popover border border-border rounded-md p-3 shadow-lg">
-                              <div className="text-small font-medium mb-1">{label}</div>
-                              <div className="text-caption text-success">YES: {data?.yes}%</div>
-                              <div className="text-caption text-destructive">NO: {data?.no}%</div>
-                              <div className="text-caption text-muted-foreground mt-1">
-                                Range: {data?.low}% - {data?.high}%
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="yes"
-                        stroke="oklch(45% 0.15 145)"
-                        strokeWidth={2}
-                        fill="url(#yesGradient)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                {/* Volume bars */}
-                <div className="h-16 mt-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                      <XAxis dataKey="date" hide />
-                      <YAxis hide />
-                      <Bar dataKey="volume" radius={[2, 2, 0, 0]}>
-                        {chartData.map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill="oklch(50% 0 0)" 
-                            opacity={0.3}
+                {chartData.length === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                    <ChartLine className="h-8 w-8 opacity-30" />
+                    <p className="text-small">No price history available for this timeframe.</p>
+                    <p className="text-caption opacity-60">Price history is fetched from Polymarket CLOB.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData}>
+                          <defs>
+                            <linearGradient id="yesGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="oklch(45% 0.15 145)" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="oklch(45% 0.15 145)" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fill: "currentColor", fontSize: 11 }}
+                            className="text-muted-foreground"
+                            tickLine={false}
+                            axisLine={false}
                           />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                          <YAxis
+                            domain={[0, 100]}
+                            tick={{ fill: "currentColor", fontSize: 11 }}
+                            className="text-muted-foreground"
+                            tickLine={false}
+                            axisLine={false}
+                            tickFormatter={(v) => `${v}%`}
+                          />
+                          <Tooltip
+                            content={({ active, payload, label }) => {
+                              if (!active || !payload?.length) return null;
+                              const data = payload[0]?.payload;
+                              return (
+                                <div className="bg-popover border border-border rounded-md p-3 shadow-lg">
+                                  <div className="text-small font-medium mb-1">{label}</div>
+                                  <div className="text-caption text-success">YES: {data?.yes}%</div>
+                                  <div className="text-caption text-destructive">NO: {data?.no}%</div>
+                                </div>
+                              );
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="yes"
+                            stroke="oklch(45% 0.15 145)"
+                            strokeWidth={2}
+                            fill="url(#yesGradient)"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="h-16 mt-2">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                          <XAxis dataKey="date" hide />
+                          <YAxis hide />
+                          <Bar dataKey="volume" radius={[2, 2, 0, 0]}>
+                            {chartData.map((_entry, index) => (
+                              <Cell key={`cell-${index}`} fill="oklch(50% 0 0)" opacity={0.3} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -576,37 +486,51 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
               <TabsContent value="activity" className="mt-4">
                 <Card>
                   <CardContent className="p-0">
-                    <div className="relative">
-                      <div className="overflow-x-auto">
-                        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card to-transparent pointer-events-none md:hidden z-10" />
-                        <table className="w-full min-w-[600px]">
-                          <thead>
-                            <tr className="border-b border-border">
-                              <th className="text-caption font-medium text-muted-foreground text-left p-3">Time</th>
-                              <th className="text-caption font-medium text-muted-foreground text-left p-3">Side</th>
-                              <th className="text-caption font-medium text-muted-foreground text-right p-3">Price</th>
-                              <th className="text-caption font-medium text-muted-foreground text-right p-3">Qty</th>
-                              <th className="text-caption font-medium text-muted-foreground text-right p-3">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {trades.map((trade) => (
-                              <tr key={trade.id} className="border-b border-border/50 hover:bg-secondary/50 transition-base">
-                                <td className="text-small p-3 font-mono">{trade.time}</td>
-                                <td className={`text-small p-3 ${
-                                  trade.side.includes("YES") ? "text-success" : "text-destructive"
-                                }`}>
-                                  {trade.side}
-                                </td>
-                                <td className="text-small p-3 text-right font-mono">{trade.price}</td>
-                                <td className="text-small p-3 text-right font-mono">{trade.quantity}</td>
-                                <td className="text-small p-3 text-right font-mono">{trade.total}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                    {liveTrades.length === 0 ? (
+                      <div className="py-12 text-center text-muted-foreground">
+                        <Broadcast className="h-8 w-8 mx-auto mb-3 opacity-40 animate-pulse" />
+                        <p className="text-small font-medium">Listening for order book changes&hellip;</p>
+                        <p className="text-caption mt-1 opacity-70">Live trade events will appear here as they occur.</p>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="relative">
+                        <div className="overflow-x-auto">
+                          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card to-transparent pointer-events-none md:hidden z-10" />
+                          <table className="w-full min-w-[500px]">
+                            <thead>
+                              <tr className="border-b border-border">
+                                <th className="text-caption font-medium text-muted-foreground text-left p-3">Time</th>
+                                <th className="text-caption font-medium text-muted-foreground text-left p-3">Side</th>
+                                <th className="text-caption font-medium text-muted-foreground text-right p-3">Price</th>
+                                <th className="text-caption font-medium text-muted-foreground text-right p-3">Qty (USDC)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {liveTrades.map((trade: LiveTrade) => (
+                                <tr key={trade.id} className="border-b border-border/50 hover:bg-secondary/50 transition-base">
+                                  <td className="text-small p-3 font-mono">
+                                    {new Date(trade.timestamp).toLocaleTimeString("en-US", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      second: "2-digit",
+                                    })}
+                                  </td>
+                                  <td className={`text-small p-3 font-medium ${trade.side === "buy" ? "text-success" : "text-destructive"}`}>
+                                    {trade.side === "buy" ? "Buy YES" : "Sell YES"}
+                                  </td>
+                                  <td className="text-small p-3 text-right font-mono">
+                                    {(trade.price * 100).toFixed(1)}¢
+                                  </td>
+                                  <td className="text-small p-3 text-right font-mono">
+                                    ${trade.size.toLocaleString()}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

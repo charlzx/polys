@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { TransformedMarket } from '@/services/polymarket';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { TransformedMarket, OrderBook } from "@/services/polymarket";
 
 const MARKETS_API = "/api/markets";
+const CLOB_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
 const POLL_INTERVAL_MS = 15_000;
+const SINGLE_POLL_INTERVAL_MS = 10_000;
+const WS_RECONNECT_DELAY_MS = 3_000;
 
 interface MarketUpdate {
   marketId: string;
@@ -10,13 +13,19 @@ interface MarketUpdate {
   noOdds: number;
   volume24h: number;
   timestamp: number;
-  volatility: 'low' | 'medium' | 'high';
-  momentum: 'bullish' | 'bearish' | 'neutral';
+  volatility: "low" | "medium" | "high";
+  momentum: "bullish" | "bearish" | "neutral";
   priceChange: number;
+}
+
+export interface TokenPair {
+  marketId: string;
+  yesTokenId: string;
 }
 
 interface UseMarketWebSocketOptions {
   marketIds?: string[];
+  tokenPairs?: TokenPair[];
   enabled?: boolean;
 }
 
@@ -27,21 +36,80 @@ interface GammaMarketSlim {
   oneDayPriceChange?: number | string;
 }
 
-// ─── Multi-market polling hook ─────────────────────────────────────────────────
+// ─── CLOB WebSocket message types ─────────────────────────────────────────────
+
+interface ClobBookLevel {
+  price: string;
+  size: string;
+}
+
+interface ClobBookEvent {
+  event_type: "book";
+  asset_id: string;
+  market: string;
+  bids: ClobBookLevel[];
+  asks: ClobBookLevel[];
+  timestamp?: string;
+  hash?: string;
+}
+
+interface ClobPriceChange {
+  price: string;
+  side: string;
+  size: string;
+}
+
+interface ClobPriceChangeEvent {
+  event_type: "price_change";
+  asset_id: string;
+  changes: ClobPriceChange[];
+}
+
+type ClobEvent = ClobBookEvent | ClobPriceChangeEvent | { event_type: string; asset_id?: string };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function parsePriceAndOdds(outcomePrices: string | undefined): { yes: number; no: number } | null {
+  try {
+    const prices = JSON.parse(outcomePrices || "[]");
+    if (prices.length < 1) return null;
+    const yes = Math.round(parseFloat(prices[0]) * 1000) / 10;
+    return { yes, no: Math.round((100 - yes) * 10) / 10 };
+  } catch {
+    return null;
+  }
+}
+
+function midPriceFromBook(bids: ClobBookLevel[], asks: ClobBookLevel[]): number | null {
+  if (!bids.length && !asks.length) return null;
+  const bestBid = bids.reduce(
+    (max, b) => Math.max(max, parseFloat(b.price)),
+    0
+  );
+  const bestAsk = asks.reduce(
+    (min, a) => Math.min(min, parseFloat(a.price)),
+    Infinity
+  );
+  if (bestBid <= 0 || bestAsk >= 1 || bestAsk <= bestBid) return null;
+  return (bestBid + bestAsk) / 2;
+}
+
+// ─── Multi-market hook ─────────────────────────────────────────────────────────
 
 export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
-  const { marketIds = [], enabled = true } = options;
+  const { marketIds = [], tokenPairs = [], enabled = true } = options;
   const [updates, setUpdates] = useState<Map<string, MarketUpdate>>(new Map());
   const [isConnected, setIsConnected] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const prevPricesRef = useRef<Map<string, number>>(new Map());
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
 
+  // ── Polling fallback (when no token pairs) ───────────────────────────────────
   const pollMarkets = useCallback(async (ids: string[]) => {
-    if (!ids.length) return;
-
+    if (!ids.length || !mountedRef.current) return;
     try {
-      // Poll the top active markets — the IDs we care about are almost always
-      // in the top-volume set.
       const sp = new URLSearchParams({
         limit: "100",
         active: "true",
@@ -49,7 +117,6 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
         order: "volume24hr",
         ascending: "false",
       });
-
       const res = await fetch(`${MARKETS_API}?${sp.toString()}`);
       if (!res.ok) return;
 
@@ -58,81 +125,168 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
 
       setUpdates((prev) => {
         const next = new Map(prev);
-
         data.forEach((market) => {
           if (!idSet.has(market.id)) return;
-
           try {
-            const prices = JSON.parse(market.outcomePrices || "[]");
-            if (prices.length < 2) return;
-
-            const newYes = Math.round(parseFloat(prices[0]) * 1000) / 10;
-            const newNo = Math.round((1 - parseFloat(prices[0])) * 1000) / 10;
-
-            const prevYes = prevPricesRef.current.get(market.id) ?? newYes;
-            const priceChange = parseFloat((newYes - prevYes).toFixed(2));
-            prevPricesRef.current.set(market.id, newYes);
+            const odds = parsePriceAndOdds(market.outcomePrices);
+            if (!odds) return;
+            const prevYes = prevPricesRef.current.get(market.id) ?? odds.yes;
+            const priceChange = parseFloat((odds.yes - prevYes).toFixed(2));
+            prevPricesRef.current.set(market.id, odds.yes);
 
             const rawChange = market.oneDayPriceChange;
-            const dayChange = rawChange !== undefined
-              ? parseFloat(String(rawChange)) * 100
-              : priceChange;
-
+            const dayChange =
+              rawChange !== undefined ? parseFloat(String(rawChange)) * 100 : priceChange;
             const absChange = Math.abs(dayChange);
-            const volatility: 'low' | 'medium' | 'high' =
-              absChange > 5 ? 'high' : absChange > 2 ? 'medium' : 'low';
-
-            const momentum: 'bullish' | 'bearish' | 'neutral' =
-              dayChange > 1 ? 'bullish' : dayChange < -1 ? 'bearish' : 'neutral';
-
-            const vol24hRaw = market.volume24hr;
-            const vol24h = vol24hRaw !== undefined
-              ? parseFloat(String(vol24hRaw))
-              : (prev.get(market.id)?.volume24h ?? 0);
 
             next.set(market.id, {
               marketId: market.id,
-              yesOdds: newYes,
-              noOdds: newNo,
-              volume24h: vol24h,
+              yesOdds: odds.yes,
+              noOdds: odds.no,
+              volume24h:
+                market.volume24hr !== undefined
+                  ? parseFloat(String(market.volume24hr))
+                  : (prev.get(market.id)?.volume24h ?? 0),
               timestamp: Date.now(),
-              volatility,
-              momentum,
+              volatility: absChange > 5 ? "high" : absChange > 2 ? "medium" : "low",
+              momentum: dayChange > 1 ? "bullish" : dayChange < -1 ? "bearish" : "neutral",
               priceChange,
             });
           } catch {
-            // ignore individual parse errors
+            // ignore parse errors for individual markets
           }
         });
-
         return next;
       });
 
-      setIsConnected(true);
+      if (mountedRef.current) setIsConnected(true);
     } catch {
-      // Network error — keep existing state, mark disconnected
-      setIsConnected(false);
+      if (mountedRef.current) setIsConnected(false);
     }
   }, []);
 
+  // ── CLOB WebSocket (when token pairs are available) ──────────────────────────
+  const connectWebSocket = useCallback(
+    (pairs: TokenPair[]) => {
+      if (!pairs.length || !mountedRef.current) return;
+
+      const tokenToMarket = new Map(pairs.map((p) => [p.yesTokenId, p.marketId]));
+      const tokenIds = pairs.map((p) => p.yesTokenId).filter(Boolean);
+
+      const ws = new WebSocket(CLOB_WS);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (!mountedRef.current) {
+          ws.close();
+          return;
+        }
+        ws.send(JSON.stringify({ auth: {}, type: "market", markets: tokenIds }));
+        if (mountedRef.current) setIsConnected(true);
+      };
+
+      ws.onmessage = (event: MessageEvent) => {
+        if (!mountedRef.current) return;
+        try {
+          const raw = JSON.parse(event.data as string) as ClobEvent | ClobEvent[];
+          const events: ClobEvent[] = Array.isArray(raw) ? raw : [raw];
+
+          setUpdates((prev) => {
+            const next = new Map(prev);
+            events.forEach((msg) => {
+              const assetId = msg.asset_id;
+              if (!assetId) return;
+              const marketId = tokenToMarket.get(assetId);
+              if (!marketId) return;
+
+              if (msg.event_type === "book") {
+                const bookMsg = msg as ClobBookEvent;
+                const mid = midPriceFromBook(bookMsg.bids ?? [], bookMsg.asks ?? []);
+                if (mid === null) return;
+
+                const newYes = Math.round(mid * 1000) / 10;
+                const prevYes = prevPricesRef.current.get(marketId) ?? newYes;
+                const priceChange = parseFloat((newYes - prevYes).toFixed(2));
+                prevPricesRef.current.set(marketId, newYes);
+
+                const existing = prev.get(marketId);
+                const absChange = Math.abs(priceChange);
+
+                next.set(marketId, {
+                  marketId,
+                  yesOdds: newYes,
+                  noOdds: Math.round((100 - newYes) * 10) / 10,
+                  volume24h: existing?.volume24h ?? 0,
+                  timestamp: Date.now(),
+                  volatility: absChange > 5 ? "high" : absChange > 2 ? "medium" : "low",
+                  momentum:
+                    priceChange > 0.5 ? "bullish" : priceChange < -0.5 ? "bearish" : "neutral",
+                  priceChange,
+                });
+              }
+              // price_change events update individual order book levels;
+              // we don't recompute the mid-price from those here — the `book`
+              // snapshot on connect already seeds the state.
+            });
+            return next;
+          });
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      ws.onerror = () => {
+        if (mountedRef.current) setIsConnected(false);
+      };
+
+      ws.onclose = () => {
+        if (!mountedRef.current) return;
+        setIsConnected(false);
+        // Reconnect after a delay
+        reconnectTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) connectWebSocket(pairs);
+        }, WS_RECONNECT_DELAY_MS);
+      };
+    },
+    [] // connectWebSocket is stable — all state is via refs/setters
+  );
+
+  // ── Main effect ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!enabled || marketIds.length === 0) {
+    mountedRef.current = true;
+
+    if (!enabled || (marketIds.length === 0 && tokenPairs.length === 0)) {
       setIsConnected(false);
       return;
     }
 
-    // Initial poll immediately, then on interval
-    pollMarkets(marketIds);
-    intervalRef.current = setInterval(() => pollMarkets(marketIds), POLL_INTERVAL_MS);
+    if (tokenPairs.length > 0) {
+      // Use real CLOB WebSocket when token pairs are provided
+      connectWebSocket(tokenPairs);
+    } else {
+      // Fall back to Gamma API polling when we only have market IDs
+      pollMarkets(marketIds);
+      pollIntervalRef.current = setInterval(() => pollMarkets(marketIds), POLL_INTERVAL_MS);
+    }
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+      mountedRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.onclose = null; // prevent reconnect loop
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
       setIsConnected(false);
     };
-  }, [enabled, marketIds.join(','), pollMarkets]);
+  }, [enabled, marketIds.join(","), tokenPairs.map((p) => p.yesTokenId).join(",")]);
 
   const getMarketUpdate = useCallback(
     (marketId: string): MarketUpdate | undefined => updates.get(marketId),
@@ -158,8 +312,11 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
     [updates]
   );
 
-  // No-op: with real data, initialization is implicit
-  const initializeMarket = useCallback(() => {}, []);
+  // Backward-compatible no-op: initialization is implicit when real data arrives
+  const initializeMarket = useCallback(
+    (_marketId?: string, _initialOdds?: number, _initialVolume?: string | number) => {},
+    []
+  );
 
   return {
     isConnected,
@@ -171,24 +328,39 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
   };
 }
 
-// ─── Single-market polling hook ────────────────────────────────────────────────
+// ─── Single-market hook ────────────────────────────────────────────────────────
+
+export interface LiveTrade {
+  id: string;
+  side: "buy" | "sell";
+  price: number;
+  size: number;
+  timestamp: number;
+}
 
 export function useSingleMarketWebSocket(
   marketId: string | undefined,
-  initialOdds?: number
+  initialOdds?: number,
+  yesTokenId?: string
 ) {
   const [currentOdds, setCurrentOdds] = useState<{ yes: number; no: number } | null>(
     initialOdds !== undefined ? { yes: initialOdds, no: 100 - initialOdds } : null
   );
   const [lastUpdate, setLastUpdate] = useState<number | null>(null);
-  const [volatility, setVolatility] = useState<'low' | 'medium' | 'high'>('low');
-  const [momentum, setMomentum] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
+  const [volatility, setVolatility] = useState<"low" | "medium" | "high">("low");
+  const [momentum, setMomentum] = useState<"bullish" | "bearish" | "neutral">("neutral");
   const [recentChanges, setRecentChanges] = useState<number[]>([]);
+  const [liveTrades, setLiveTrades] = useState<LiveTrade[]>([]);
+  const [liveOrderBook, setLiveOrderBook] = useState<OrderBook | null>(null);
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectRef = useRef<NodeJS.Timeout | null>(null);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
   const latestOddsRef = useRef<number>(initialOdds ?? 50);
+  const priceHistoryRef = useRef<number[]>([]);
 
-  // Sync initial odds when they arrive from parent query
+  // Sync initial odds when they arrive
   useEffect(() => {
     if (initialOdds !== undefined && currentOdds === null) {
       setCurrentOdds({ yes: initialOdds, no: 100 - initialOdds });
@@ -196,57 +368,154 @@ export function useSingleMarketWebSocket(
     }
   }, [initialOdds, currentOdds]);
 
+  const processOddsUpdate = useCallback((newYes: number) => {
+    const prevYes = latestOddsRef.current;
+    const priceChange = parseFloat((newYes - prevYes).toFixed(2));
+    latestOddsRef.current = newYes;
+
+    setCurrentOdds({ yes: newYes, no: Math.round((100 - newYes) * 10) / 10 });
+    setLastUpdate(Date.now());
+
+    priceHistoryRef.current = [...priceHistoryRef.current.slice(-14), priceChange];
+    const history = priceHistoryRef.current;
+    const rms = Math.sqrt(history.reduce((s, c) => s + c * c, 0) / history.length);
+    const avg = history.reduce((s, c) => s + c, 0) / history.length;
+
+    setVolatility(rms < 0.3 ? "low" : rms < 1.0 ? "medium" : "high");
+    setMomentum(avg > 0.1 ? "bullish" : avg < -0.1 ? "bearish" : "neutral");
+    setRecentChanges([...history]);
+  }, []);
+
+  // ── CLOB WebSocket for single-market live data ───────────────────────────────
   useEffect(() => {
+    mountedRef.current = true;
     if (!marketId) return;
 
-    const poll = async () => {
-      try {
-        const res = await fetch(`${MARKETS_API}/${marketId}`);
-        if (!res.ok) return;
+    if (yesTokenId) {
+      // Use real CLOB WebSocket
+      const connect = () => {
+        if (!mountedRef.current) return;
+        const ws = new WebSocket(CLOB_WS);
+        wsRef.current = ws;
 
-        const data = await res.json();
-        const prices = JSON.parse(data.outcomePrices || "[]");
-        if (prices.length < 2) return;
+        ws.onopen = () => {
+          if (!mountedRef.current) { ws.close(); return; }
+          ws.send(JSON.stringify({ auth: {}, type: "market", markets: [yesTokenId] }));
+        };
 
-        const newYes = Math.round(parseFloat(prices[0]) * 1000) / 10;
-        const newNo = Math.round((1 - parseFloat(prices[0])) * 1000) / 10;
-        const priceChange = parseFloat((newYes - latestOddsRef.current).toFixed(2));
+        ws.onmessage = (event: MessageEvent) => {
+          if (!mountedRef.current) return;
+          try {
+            const raw = JSON.parse(event.data as string) as ClobEvent | ClobEvent[];
+            const events: ClobEvent[] = Array.isArray(raw) ? raw : [raw];
 
-        latestOddsRef.current = newYes;
+            events.forEach((msg) => {
+              if (msg.asset_id !== yesTokenId) return;
 
-        setCurrentOdds({ yes: newYes, no: newNo });
-        setLastUpdate(Date.now());
+              if (msg.event_type === "book") {
+                const bookMsg = msg as ClobBookEvent;
 
-        setRecentChanges((prev) => {
-          const updated = [...prev.slice(-14), priceChange];
+                // Update live order book
+                const rawBids = (bookMsg.bids ?? [])
+                  .sort((a, b) => parseFloat(b.price) - parseFloat(a.price))
+                  .slice(0, 8);
+                const rawAsks = (bookMsg.asks ?? [])
+                  .sort((a, b) => parseFloat(a.price) - parseFloat(b.price))
+                  .slice(0, 8);
 
-          const rms = Math.sqrt(
-            updated.reduce((s, c) => s + c * c, 0) / updated.length
-          );
-          setVolatility(rms < 0.3 ? 'low' : rms < 1.0 ? 'medium' : 'high');
+                let bidTotal = 0;
+                const bids = rawBids.map((b) => {
+                  bidTotal += parseFloat(b.size);
+                  return { price: parseFloat(b.price), size: Math.round(parseFloat(b.size)), total: bidTotal };
+                });
+                let askTotal = 0;
+                const asks = rawAsks.map((a) => {
+                  askTotal += parseFloat(a.size);
+                  return { price: parseFloat(a.price), size: Math.round(parseFloat(a.size)), total: askTotal };
+                });
+                if (mountedRef.current) {
+                  setLiveOrderBook({
+                    bids,
+                    asks: asks.reverse(),
+                    maxTotal: Math.max(bidTotal, askTotal),
+                    timestamp: bookMsg.timestamp ? parseInt(bookMsg.timestamp) : Date.now(),
+                  });
+                }
 
-          const avg = updated.reduce((s, c) => s + c, 0) / updated.length;
-          setMomentum(avg > 0.1 ? 'bullish' : avg < -0.1 ? 'bearish' : 'neutral');
+                // Update odds from mid-price
+                const mid = midPriceFromBook(bookMsg.bids ?? [], bookMsg.asks ?? []);
+                if (mid !== null && mountedRef.current) {
+                  processOddsUpdate(Math.round(mid * 1000) / 10);
+                }
+              } else if (msg.event_type === "price_change") {
+                const pcMsg = msg as ClobPriceChangeEvent;
+                // Treat significant non-zero changes as trade signals
+                if (pcMsg.changes && mountedRef.current) {
+                  const trades: LiveTrade[] = pcMsg.changes
+                    .filter((c) => parseFloat(c.size) > 0)
+                    .map((c) => ({
+                      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                      side: c.side === "BUY" ? "buy" : "sell",
+                      price: parseFloat(c.price),
+                      size: Math.round(parseFloat(c.size)),
+                      timestamp: Date.now(),
+                    }));
+                  if (trades.length > 0) {
+                    setLiveTrades((prev) => [...trades, ...prev].slice(0, 20));
+                  }
+                }
+              }
+            });
+          } catch {
+            // ignore malformed messages
+          }
+        };
 
-          return updated;
-        });
-      } catch {
-        // ignore network errors, keep existing state
-      }
-    };
+        ws.onerror = () => { /* silent */ };
 
-    // Initial poll after a short delay (parent query likely already has fresh data)
-    const initTimeout = setTimeout(poll, 2_000);
-    intervalRef.current = setInterval(poll, 10_000);
+        ws.onclose = () => {
+          if (!mountedRef.current) return;
+          reconnectRef.current = setTimeout(connect, WS_RECONNECT_DELAY_MS);
+        };
+      };
+
+      connect();
+    } else {
+      // Fall back to Gamma API polling if no token ID available
+      const poll = async () => {
+        if (!mountedRef.current) return;
+        try {
+          const res = await fetch(`${MARKETS_API}/${marketId}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          const odds = parsePriceAndOdds(data.outcomePrices);
+          if (odds && mountedRef.current) processOddsUpdate(odds.yes);
+        } catch {
+          // ignore network errors
+        }
+      };
+
+      const initTimeout = setTimeout(poll, 2_000);
+      pollRef.current = setInterval(poll, SINGLE_POLL_INTERVAL_MS);
+
+      return () => {
+        mountedRef.current = false;
+        clearTimeout(initTimeout);
+        if (pollRef.current) clearInterval(pollRef.current);
+      };
+    }
 
     return () => {
-      clearTimeout(initTimeout);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+      mountedRef.current = false;
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
       }
+      if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [marketId]);
+  }, [marketId, yesTokenId]);
 
-  return { currentOdds, lastUpdate, volatility, momentum, recentChanges };
+  return { currentOdds, lastUpdate, volatility, momentum, recentChanges, liveTrades, liveOrderBook };
 }
