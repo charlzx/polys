@@ -60,11 +60,6 @@ function buildCategories(markets: FlatKalshiMarket[]): string[] {
   return ["All", ...Array.from(set).sort()];
 }
 
-// External Kalshi market URL
-function kalshiUrl(ticker: string): string {
-  return `https://kalshi.com/markets/${ticker.split("-")[0].toLowerCase()}`;
-}
-
 // Format volume in dollars for display
 function formatVolume(fp: number): string {
   if (fp <= 0) return "—";
@@ -73,10 +68,16 @@ function formatVolume(fp: number): string {
   return `$${fp.toFixed(0)}`;
 }
 
+function formatEndDate(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function KalshiMarketCard({ market, index }: { market: FlatKalshiMarket; index: number }) {
   const yesPercent = Math.round(market.yesMid * 100);
   const noPercent = 100 - yesPercent;
-  const url = kalshiUrl(market.ticker);
 
   return (
     <motion.div
@@ -115,15 +116,20 @@ function KalshiMarketCard({ market, index }: { market: FlatKalshiMarket; index: 
           </div>
 
           {/* YES probability bar */}
-          <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-4">
+          <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-3">
             <div
               className="h-full bg-success rounded-full transition-all"
               style={{ width: `${yesPercent}%` }}
             />
           </div>
 
+          {/* End date */}
+          <div className="text-caption text-muted-foreground mb-4">
+            Closes {formatEndDate(market.closeTime)}
+          </div>
+
           {/* External trade link */}
-          <a href={url} target="_blank" rel="noopener noreferrer" className="block mt-auto">
+          <a href={market.externalUrl} target="_blank" rel="noopener noreferrer" className="block mt-auto">
             <Button
               variant="secondary"
               size="sm"

@@ -36,6 +36,7 @@ export interface KalshiOrderBook {
 
 export interface FlatKalshiMarket {
   ticker: string;
+  eventTicker: string;
   eventTitle: string;
   marketTitle: string;
   eventCategory: string;
@@ -43,6 +44,8 @@ export interface FlatKalshiMarket {
   yesBid: number;
   yesAsk: number;
   volumeFp: number;
+  closeTime: string; // ISO 8601 — market end date
+  externalUrl: string; // canonical kalshi.com URL
 }
 
 // Returns mid-price as 0–1 probability from a KalshiMarket
@@ -133,6 +136,7 @@ export async function fetchKalshiEventsServer(): Promise<FlatKalshiMarket[]> {
 
     result.push({
       ticker: m.ticker,
+      eventTicker: event.event_ticker,
       eventTitle: event.title || m.title,
       marketTitle: m.title,
       eventCategory: event.category ?? "",
@@ -140,6 +144,8 @@ export async function fetchKalshiEventsServer(): Promise<FlatKalshiMarket[]> {
       yesBid: parseFloat(m.yes_bid_dollars ?? "0"),
       yesAsk: parseFloat(m.yes_ask_dollars ?? "0"),
       volumeFp: parseFloat(m.volume_fp ?? "0"),
+      closeTime: m.close_time ?? "",
+      externalUrl: `https://kalshi.com/markets/${event.event_ticker.toLowerCase()}`,
     });
   }
 
