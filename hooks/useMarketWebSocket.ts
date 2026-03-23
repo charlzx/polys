@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { TransformedMarket } from '@/services/polymarket';
 
+const MARKETS_API = "/api/markets";
+const POLL_INTERVAL_MS = 15_000;
+
 interface MarketUpdate {
   marketId: string;
   yesOdds: number;
@@ -17,198 +20,146 @@ interface UseMarketWebSocketOptions {
   enabled?: boolean;
 }
 
-interface MarketState {
-  yesOdds: number;
-  volume24h: number;
-  momentum: number; // -1 to 1, persists for smoother trends
-  volatilityLevel: number; // 0.3-2.0
-  lastChanges: number[]; // Track last N changes for volatility calc
+interface GammaMarketSlim {
+  id: string;
+  outcomePrices?: string;
+  volume24hr?: number | string;
+  oneDayPriceChange?: number | string;
 }
 
-// Simulated real-time updates with realistic market behavior
+// ─── Multi-market polling hook ─────────────────────────────────────────────────
+
 export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
   const { marketIds = [], enabled = true } = options;
   const [updates, setUpdates] = useState<Map<string, MarketUpdate>>(new Map());
   const [isConnected, setIsConnected] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const marketDataRef = useRef<Map<string, MarketState>>(new Map());
+  const prevPricesRef = useRef<Map<string, number>>(new Map());
 
-  // Initialize market with state for realistic simulation
-  const initializeMarket = useCallback((marketId: string, initialOdds: number, initialVolume: string | number) => {
-    if (!marketDataRef.current.has(marketId)) {
-      const vol = typeof initialVolume === 'string' 
-        ? parseFloat(initialVolume.replace(/[^0-9.]/g, '')) * 1000 
-        : initialVolume;
-      
-      marketDataRef.current.set(marketId, {
-        yesOdds: initialOdds,
-        volume24h: vol || 100000,
-        momentum: (Math.random() - 0.5) * 0.5, // Initial random momentum
-        volatilityLevel: 0.5 + Math.random() * 0.5, // Base volatility
-        lastChanges: [],
+  const pollMarkets = useCallback(async (ids: string[]) => {
+    if (!ids.length) return;
+
+    try {
+      // Poll the top active markets — the IDs we care about are almost always
+      // in the top-volume set.
+      const sp = new URLSearchParams({
+        limit: "100",
+        active: "true",
+        closed: "false",
+        order: "volume24hr",
+        ascending: "false",
       });
+
+      const res = await fetch(`${MARKETS_API}?${sp.toString()}`);
+      if (!res.ok) return;
+
+      const data: GammaMarketSlim[] = await res.json();
+      const idSet = new Set(ids);
+
+      setUpdates((prev) => {
+        const next = new Map(prev);
+
+        data.forEach((market) => {
+          if (!idSet.has(market.id)) return;
+
+          try {
+            const prices = JSON.parse(market.outcomePrices || "[]");
+            if (prices.length < 2) return;
+
+            const newYes = Math.round(parseFloat(prices[0]) * 1000) / 10;
+            const newNo = Math.round((1 - parseFloat(prices[0])) * 1000) / 10;
+
+            const prevYes = prevPricesRef.current.get(market.id) ?? newYes;
+            const priceChange = parseFloat((newYes - prevYes).toFixed(2));
+            prevPricesRef.current.set(market.id, newYes);
+
+            const rawChange = market.oneDayPriceChange;
+            const dayChange = rawChange !== undefined
+              ? parseFloat(String(rawChange)) * 100
+              : priceChange;
+
+            const absChange = Math.abs(dayChange);
+            const volatility: 'low' | 'medium' | 'high' =
+              absChange > 5 ? 'high' : absChange > 2 ? 'medium' : 'low';
+
+            const momentum: 'bullish' | 'bearish' | 'neutral' =
+              dayChange > 1 ? 'bullish' : dayChange < -1 ? 'bearish' : 'neutral';
+
+            const vol24hRaw = market.volume24hr;
+            const vol24h = vol24hRaw !== undefined
+              ? parseFloat(String(vol24hRaw))
+              : (prev.get(market.id)?.volume24h ?? 0);
+
+            next.set(market.id, {
+              marketId: market.id,
+              yesOdds: newYes,
+              noOdds: newNo,
+              volume24h: vol24h,
+              timestamp: Date.now(),
+              volatility,
+              momentum,
+              priceChange,
+            });
+          } catch {
+            // ignore individual parse errors
+          }
+        });
+
+        return next;
+      });
+
+      setIsConnected(true);
+    } catch {
+      // Network error — keep existing state, mark disconnected
+      setIsConnected(false);
     }
   }, []);
 
-  // Generate realistic price movement using Ornstein-Uhlenbeck process
-  const generateUpdate = useCallback((marketId: string): MarketUpdate => {
-    const state = marketDataRef.current.get(marketId) || {
-      yesOdds: 50,
-      volume24h: 100000,
-      momentum: 0,
-      volatilityLevel: 0.5,
-      lastChanges: [],
-    };
-
-    // Ornstein-Uhlenbeck-inspired mean reversion
-    const meanReversionStrength = 0.1;
-    const equilibrium = 50; // Odds tend toward 50%
-    const meanReversionForce = (equilibrium - state.yesOdds) * meanReversionStrength * 0.01;
-
-    // Update momentum with decay and random shocks
-    const momentumDecay = 0.85;
-    const randomShock = (Math.random() - 0.5) * 0.4;
-    const newMomentum = state.momentum * momentumDecay + randomShock;
-
-    // Calculate volatility from recent changes
-    const recentVolatility = state.lastChanges.length > 0
-      ? Math.sqrt(state.lastChanges.reduce((sum, c) => sum + c * c, 0) / state.lastChanges.length)
-      : 0.5;
-    
-    // Volatility clustering - high vol tends to follow high vol
-    const volatilityPersistence = 0.7;
-    const baseVol = 0.3 + Math.random() * 0.3;
-    const adjustedVolatility = state.volatilityLevel * volatilityPersistence + baseVol * (1 - volatilityPersistence);
-
-    // Price change combines momentum, mean reversion, and random noise
-    const noise = (Math.random() - 0.5) * adjustedVolatility * 2;
-    const priceChange = newMomentum + meanReversionForce + noise;
-
-    // Apply bounds with soft barriers
-    let newOdds = state.yesOdds + priceChange;
-    if (newOdds > 92) newOdds = 92 - (newOdds - 92) * 0.5;
-    if (newOdds < 8) newOdds = 8 + (8 - newOdds) * 0.5;
-    newOdds = Math.round(newOdds * 10) / 10;
-
-    // Volume increases with volatility and trading activity
-    const volumeMultiplier = 1 + Math.abs(priceChange) * 0.1 + Math.random() * 0.02;
-    const volumeIncrease = state.volume24h * (volumeMultiplier - 1) * 0.1;
-    const newVolume = state.volume24h + Math.max(100, volumeIncrease);
-
-    // Track changes for volatility calculation
-    const updatedChanges = [...state.lastChanges.slice(-9), priceChange];
-
-    // Determine volatility label
-    const volatilityLabel: 'low' | 'medium' | 'high' = 
-      recentVolatility < 0.5 ? 'low' : recentVolatility < 1.2 ? 'medium' : 'high';
-
-    // Determine momentum label
-    const avgMomentum = updatedChanges.reduce((a, b) => a + b, 0) / updatedChanges.length;
-    const momentumLabel: 'bullish' | 'bearish' | 'neutral' = 
-      avgMomentum > 0.15 ? 'bullish' : avgMomentum < -0.15 ? 'bearish' : 'neutral';
-
-    // Update state
-    marketDataRef.current.set(marketId, {
-      yesOdds: newOdds,
-      volume24h: newVolume,
-      momentum: newMomentum,
-      volatilityLevel: adjustedVolatility,
-      lastChanges: updatedChanges,
-    });
-
-    return {
-      marketId,
-      yesOdds: newOdds,
-      noOdds: Math.round((100 - newOdds) * 10) / 10,
-      volume24h: newVolume,
-      timestamp: Date.now(),
-      volatility: volatilityLabel,
-      momentum: momentumLabel,
-      priceChange: Math.round(priceChange * 100) / 100,
-    };
-  }, []);
-
-  // Start simulated WebSocket connection
   useEffect(() => {
     if (!enabled || marketIds.length === 0) {
       setIsConnected(false);
       return;
     }
 
-    let isMounted = true;
-    const connectTimeout = setTimeout(() => {
-      if (!isMounted) return;
-      setIsConnected(true);
-
-      // Variable update intervals for more realistic behavior
-      const tick = () => {
-        if (!isMounted) return;
-        
-        // Pick random subset of markets to update (simulates uneven activity)
-        const activityLevel = 0.3 + Math.random() * 0.4; // 30-70% of markets update
-        const numUpdates = Math.max(1, Math.floor(marketIds.length * activityLevel));
-        const shuffled = [...marketIds].sort(() => Math.random() - 0.5);
-        const toUpdate = shuffled.slice(0, numUpdates);
-
-        setUpdates((prev) => {
-          const next = new Map(prev);
-          toUpdate.forEach((id) => {
-            const update = generateUpdate(id);
-            next.set(id, update);
-          });
-          return next;
-        });
-
-        // Variable timing: 1.5-4 seconds between updates
-        const nextInterval = 1500 + Math.random() * 2500;
-        if (isMounted) {
-          intervalRef.current = setTimeout(tick, nextInterval);
-        }
-      };
-
-      tick();
-    }, 300);
+    // Initial poll immediately, then on interval
+    pollMarkets(marketIds);
+    intervalRef.current = setInterval(() => pollMarkets(marketIds), POLL_INTERVAL_MS);
 
     return () => {
-      isMounted = false;
-      clearTimeout(connectTimeout);
       if (intervalRef.current) {
-        clearTimeout(intervalRef.current);
+        clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
       setIsConnected(false);
     };
-  }, [enabled, marketIds.join(','), generateUpdate]);
+  }, [enabled, marketIds.join(','), pollMarkets]);
 
-  // Get latest update for a specific market
-  const getMarketUpdate = useCallback((marketId: string): MarketUpdate | undefined => {
-    return updates.get(marketId);
-  }, [updates]);
+  const getMarketUpdate = useCallback(
+    (marketId: string): MarketUpdate | undefined => updates.get(marketId),
+    [updates]
+  );
 
-  // Apply updates to market data
-  const applyUpdatesToMarkets = useCallback((markets: TransformedMarket[]): TransformedMarket[] => {
-    return markets.map((market) => {
-      const update = updates.get(market.id);
-      if (update) {
-        return {
-          ...market,
-          yesOdds: update.yesOdds,
-          noOdds: update.noOdds,
-        };
-      }
-      return market;
-    });
-  }, [updates]);
+  const applyUpdatesToMarkets = useCallback(
+    (markets: TransformedMarket[]): TransformedMarket[] =>
+      markets.map((market) => {
+        const u = updates.get(market.id);
+        return u ? { ...market, yesOdds: u.yesOdds, noOdds: u.noOdds } : market;
+      }),
+    [updates]
+  );
 
-  // Get volatility info for a market
-  const getMarketVolatility = useCallback((marketId: string) => {
-    const update = updates.get(marketId);
-    return update ? {
-      level: update.volatility,
-      momentum: update.momentum,
-      lastChange: update.priceChange,
-    } : null;
-  }, [updates]);
+  const getMarketVolatility = useCallback(
+    (marketId: string) => {
+      const u = updates.get(marketId);
+      return u
+        ? { level: u.volatility, momentum: u.momentum, lastChange: u.priceChange }
+        : null;
+    },
+    [updates]
+  );
+
+  // No-op: with real data, initialization is implicit
+  const initializeMarket = useCallback(() => {}, []);
 
   return {
     isConnected,
@@ -220,105 +171,82 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
   };
 }
 
-// Hook for single market real-time updates with enhanced realism
-export function useSingleMarketWebSocket(marketId: string | undefined, initialOdds?: number) {
-  const [currentOdds, setCurrentOdds] = useState<{ yes: number; no: number } | null>(null);
+// ─── Single-market polling hook ────────────────────────────────────────────────
+
+export function useSingleMarketWebSocket(
+  marketId: string | undefined,
+  initialOdds?: number
+) {
+  const [currentOdds, setCurrentOdds] = useState<{ yes: number; no: number } | null>(
+    initialOdds !== undefined ? { yes: initialOdds, no: 100 - initialOdds } : null
+  );
   const [lastUpdate, setLastUpdate] = useState<number | null>(null);
-  const [volatility, setVolatility] = useState<'low' | 'medium' | 'high'>('medium');
+  const [volatility, setVolatility] = useState<'low' | 'medium' | 'high'>('low');
   const [momentum, setMomentum] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
   const [recentChanges, setRecentChanges] = useState<number[]>([]);
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const stateRef = useRef({
-    odds: initialOdds || 50,
-    momentum: 0,
-    volatilityLevel: 0.5,
-  });
+  const latestOddsRef = useRef<number>(initialOdds ?? 50);
+
+  // Sync initial odds when they arrive from parent query
+  useEffect(() => {
+    if (initialOdds !== undefined && currentOdds === null) {
+      setCurrentOdds({ yes: initialOdds, no: 100 - initialOdds });
+      latestOddsRef.current = initialOdds;
+    }
+  }, [initialOdds, currentOdds]);
 
   useEffect(() => {
     if (!marketId) return;
 
-    if (initialOdds !== undefined) {
-      stateRef.current.odds = initialOdds;
-      setCurrentOdds({ yes: initialOdds, no: 100 - initialOdds });
-    }
+    const poll = async () => {
+      try {
+        const res = await fetch(`${MARKETS_API}/${marketId}`);
+        if (!res.ok) return;
 
-    let isMounted = true;
+        const data = await res.json();
+        const prices = JSON.parse(data.outcomePrices || "[]");
+        if (prices.length < 2) return;
 
-    const tick = () => {
-      if (!isMounted) return;
-      
-      const state = stateRef.current;
+        const newYes = Math.round(parseFloat(prices[0]) * 1000) / 10;
+        const newNo = Math.round((1 - parseFloat(prices[0])) * 1000) / 10;
+        const priceChange = parseFloat((newYes - latestOddsRef.current).toFixed(2));
 
-      // Ornstein-Uhlenbeck process
-      const meanReversion = (50 - state.odds) * 0.005;
-      const momentumDecay = 0.8;
-      const shock = (Math.random() - 0.5) * 0.6;
-      const newMomentum = state.momentum * momentumDecay + shock;
+        latestOddsRef.current = newYes;
 
-      // Calculate price change
-      const noise = (Math.random() - 0.5) * state.volatilityLevel;
-      const priceChange = newMomentum * 0.5 + meanReversion + noise;
+        setCurrentOdds({ yes: newYes, no: newNo });
+        setLastUpdate(Date.now());
 
-      // Update odds with bounds
-      let newOdds = state.odds + priceChange;
-      if (newOdds > 95) newOdds = 95 - Math.random() * 2;
-      if (newOdds < 5) newOdds = 5 + Math.random() * 2;
-      newOdds = Math.round(newOdds * 10) / 10;
+        setRecentChanges((prev) => {
+          const updated = [...prev.slice(-14), priceChange];
 
-      // Update volatility with persistence
-      const newVolLevel = state.volatilityLevel * 0.7 + (0.3 + Math.random() * 0.4) * 0.3;
+          const rms = Math.sqrt(
+            updated.reduce((s, c) => s + c * c, 0) / updated.length
+          );
+          setVolatility(rms < 0.3 ? 'low' : rms < 1.0 ? 'medium' : 'high');
 
-      stateRef.current = {
-        odds: newOdds,
-        momentum: newMomentum,
-        volatilityLevel: newVolLevel,
-      };
+          const avg = updated.reduce((s, c) => s + c, 0) / updated.length;
+          setMomentum(avg > 0.1 ? 'bullish' : avg < -0.1 ? 'bearish' : 'neutral');
 
-      setCurrentOdds({
-        yes: newOdds,
-        no: Math.round((100 - newOdds) * 10) / 10,
-      });
-      setLastUpdate(Date.now());
-
-      // Track recent changes
-      setRecentChanges(prev => {
-        const updated = [...prev.slice(-14), priceChange];
-        
-        // Calculate volatility from changes
-        const avgChange = Math.sqrt(updated.reduce((s, c) => s + c * c, 0) / updated.length);
-        setVolatility(avgChange < 0.3 ? 'low' : avgChange < 0.8 ? 'medium' : 'high');
-
-        // Calculate momentum
-        const avgDirection = updated.reduce((s, c) => s + c, 0) / updated.length;
-        setMomentum(avgDirection > 0.1 ? 'bullish' : avgDirection < -0.1 ? 'bearish' : 'neutral');
-
-        return updated;
-      });
-
-      // Variable interval
-      const nextInterval = 2000 + Math.random() * 3000;
-      if (isMounted) {
-        intervalRef.current = setTimeout(tick, nextInterval);
+          return updated;
+        });
+      } catch {
+        // ignore network errors, keep existing state
       }
     };
 
-    // Start after brief delay
-    intervalRef.current = setTimeout(tick, 1000);
+    // Initial poll after a short delay (parent query likely already has fresh data)
+    const initTimeout = setTimeout(poll, 2_000);
+    intervalRef.current = setInterval(poll, 10_000);
 
     return () => {
-      isMounted = false;
+      clearTimeout(initTimeout);
       if (intervalRef.current) {
-        clearTimeout(intervalRef.current);
+        clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [marketId, initialOdds]);
+  }, [marketId]);
 
-  return { 
-    currentOdds, 
-    lastUpdate,
-    volatility,
-    momentum,
-    recentChanges,
-  };
+  return { currentOdds, lastUpdate, volatility, momentum, recentChanges };
 }

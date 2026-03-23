@@ -22,7 +22,7 @@ import {
   ChartBar,
   ChartLine,
 } from "@phosphor-icons/react";
-import { useMarket } from "@/services/polymarket";
+import { useMarket, usePriceHistory } from "@/services/polymarket";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { AppHeader } from "@/components/AppHeader";
 import {
@@ -263,12 +263,20 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
   const [isWatched, setIsWatched] = useState(() => getWatchlist().includes(id));
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
 
-  // Generate chart data
+  // Fetch real price history from CLOB API; fall back to generated data if unavailable
+  const { data: realHistory } = usePriceHistory(market?.yesTokenId, timeframe);
+
   const chartData = useMemo(() => {
     if (!market) return [];
-    const days = timeframe === "24H" ? 1 : timeframe === "7D" ? 7 : timeframe === "30D" ? 30 : timeframe === "3M" ? 90 : 365;
+    if (realHistory && realHistory.length > 0) return realHistory;
+    const days =
+      timeframe === "24H" ? 1
+      : timeframe === "7D" ? 7
+      : timeframe === "30D" ? 30
+      : timeframe === "3M" ? 90
+      : 365;
     return generateHistoricalData(market.yesOdds, days);
-  }, [market, timeframe]);
+  }, [market, timeframe, realHistory]);
 
   // Generate order book
   const orderBook = useMemo(() => {
