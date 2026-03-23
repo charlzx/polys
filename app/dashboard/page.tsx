@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+// Static display-only UI data — not market data; intentionally not live
 import { quickStats } from "@/data/quickStats";
 import { recentAlerts } from "@/data/alerts";
 import { useMarkets } from "@/services/polymarket";

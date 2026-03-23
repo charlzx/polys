@@ -10,6 +10,7 @@ import { Footer } from "@/components/Footer";
 import { useMarkets } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import type { TransformedMarket } from "@/services/polymarket";
+// Static display-only UI data (hero section carousel) — not live market data; intentionally not live
 import { mockPredictions } from "@/data/predictions";
 import { features } from "@/data/features";
 import { categories } from "@/data/categories";

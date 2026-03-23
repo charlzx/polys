@@ -130,6 +130,8 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const wsHealthTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastBookEventRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
 
 
@@ -205,6 +207,19 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
         }
         ws.send(JSON.stringify({ assets_ids: tokenIds, type: "market" }));
         if (mountedRef.current) setIsConnected(true);
+
+        // Health watchdog: if no book event in 15s, fall back to REST polling
+        wsHealthTimerRef.current = setTimeout(() => {
+          if (!mountedRef.current) return;
+          if (lastBookEventRef.current === null) {
+            console.warn("[useMarketWebSocket] No book events received; starting REST fallback poll");
+            pollMarkets(pairs.map((p) => p.marketId));
+            pollIntervalRef.current = setInterval(
+              () => pollMarkets(pairs.map((p) => p.marketId)),
+              POLL_INTERVAL_MS
+            );
+          }
+        }, WS_HEALTH_TIMEOUT_MS);
       };
 
       ws.onmessage = (event: MessageEvent) => {
@@ -223,6 +238,12 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
 
               if (msg.event_type === "book") {
                 const bookMsg = msg as ClobBookEvent;
+                // Record receipt and clear health watchdog on first book event
+                if (!lastBookEventRef.current) {
+                  lastBookEventRef.current = Date.now();
+                  if (wsHealthTimerRef.current) { clearTimeout(wsHealthTimerRef.current); wsHealthTimerRef.current = null; }
+                  if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null; }
+                }
                 const mid = midPriceFromBook(bookMsg.bids ?? [], bookMsg.asks ?? []);
                 if (mid === null) return;
                 applyMidUpdate(marketId, mid, next, prev);
@@ -285,6 +306,7 @@ export function useMarketWebSocket(options: UseMarketWebSocketOptions = {}) {
     }
 
     return () => {
+      if (wsHealthTimerRef.current) { clearTimeout(wsHealthTimerRef.current); wsHealthTimerRef.current = null; }
       mountedRef.current = false;
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
