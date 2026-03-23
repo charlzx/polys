@@ -145,6 +145,36 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
   - Desktop header (`components/AppHeader.tsx`): "Kalshi" tab added between Markets and Whales; uses `ChartBar` icon; all 7 tabs: Dashboard, Markets, Kalshi, Whales, Arbitrage, Portfolio, Alerts
   - Mobile bottom nav (`components/MobileBottomNav.tsx`): "Kalshi" replaces "Whales" (Whales still in desktop nav); 6-item layout: Dashboard, Markets, Kalshi, Arbitrage, Alerts, Portfolio
 
+## News Section & Market Event Images (Task #12 — COMPLETE)
+- **Event images on market cards**: All market cards across the app now display Polymarket event images
+  - `FeaturedMarket` (homepage top markets grid): shows 112px tall hero image above card content
+  - `MarketRow` (homepage list): shows small 8×8 thumbnail in list rows (desktop only)
+  - `MarketCard` (app/markets/page.tsx grid): shows 112px image at top of card; fallback Newspaper icon
+  - List view in markets page: shows 40×40 thumbnail per row (desktop only)
+  - All images use Next.js `Image`; `remotePatterns` in `next.config.ts` allows Polymarket S3 + polymarket.com hostnames
+- **News API route** (`app/api/news/route.ts`): GET proxy fetching top Polymarket events sorted by volume
+  - Returns: `id, slug, question, description, image, yesOdds, change24h, volume, volume24h, category, tags, endDate`
+  - Supports `limit`, `offset`, `category` query params; 60-second cache
+- **Homepage news section** (`app/page.tsx`): Horizontally scrollable row of 6–8 Twitter-style cards
+  - Each card: event image, question headline, probability badge, 24h change indicator, volume
+  - Cards link to `/news/[slug]`; section shows "See all →" link to `/news`
+  - Fetched client-side via `useEffect` on `/api/news?limit=8`
+- **News index page** (`app/news/page.tsx`): Grid of all top Polymarket events as news cards
+  - Category filtering (All, Politics, Crypto, Sports, Economics, Tech, Entertainment, General)
+  - Search by question text
+  - Pagination (12 per page)
+  - Cards show event image, odds badge, 24h change, volume, end date
+- **News detail page** (`app/news/[slug]/page.tsx`): Full event page at `/news/[slug]`
+  - Hero image with gradient overlay
+  - Full question + description
+  - Live YES/NO odds + 24h change
+  - Price history chart with timeframe selector (24H/7D/30D/3M/ALL)
+  - AI Insights sidebar card (uses existing `useMarketSummary` hook — requires auth for AI)
+  - Market Info sidebar (volume, 24h volume, end date, category)
+  - Fetches market by slug from `/api/markets?slug=<slug>`; falls back to `/api/markets/<slug>` by ID
+- **Navigation**: "News" added to `PublicHeader` desktop nav and `AppHeader` navTabs (Newspaper icon)
+- **PublicHeader**: `onMobileNavOpen` prop made optional (default no-op) so news pages can use it without wiring mobile nav
+
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
 - **Build**: `pnpm run build`

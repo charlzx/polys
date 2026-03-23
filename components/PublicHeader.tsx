@@ -34,7 +34,7 @@ import {
 interface PublicHeaderProps {
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
-  onMobileNavOpen: () => void;
+  onMobileNavOpen?: () => void;
 }
 
 // Mock notifications - same as AppHeader
@@ -62,7 +62,7 @@ const mockNotifications = [
   },
 ];
 
-export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen }: PublicHeaderProps) {
+export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen = () => {} }: PublicHeaderProps) {
   const { user, isAuthenticated, logout } = useAuth();
   const router = useRouter();
   const [notifications] = useState(mockNotifications);
@@ -89,6 +89,9 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
           <nav className="hidden md:flex items-center gap-6 ml-8">
             <Link href="/markets" className="text-small text-muted-foreground hover:text-foreground transition-colors">
               Markets
+            </Link>
+            <Link href="/news" className="text-small text-muted-foreground hover:text-foreground transition-colors">
+              News
             </Link>
             <Link href="/dashboard" className="text-small text-muted-foreground hover:text-foreground transition-colors">
               Analytics

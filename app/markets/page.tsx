@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ import {
   CaretLeft,
   CaretRight,
   Broadcast,
+  Newspaper,
 } from "@phosphor-icons/react";
 import { useMarkets, MARKET_CATEGORIES, type MarketCategory, type TransformedMarket } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
@@ -50,7 +52,23 @@ function MarketCard({ market, isWatched, onToggleWatch, index }: {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.05 }}
     >
-      <Card className="group hover:border-primary/30 transition-base relative">
+      <Card className="group hover:border-primary/30 transition-base relative overflow-hidden">
+        {/* Event image */}
+        <div className="relative w-full h-28 bg-secondary/50">
+          {market.image ? (
+            <Image
+              src={market.image}
+              alt={market.name}
+              fill
+              className="object-cover"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Newspaper className="h-8 w-8 text-muted-foreground/30" />
+            </div>
+          )}
+        </div>
         <CardContent className="p-4">
           {/* Watchlist Star */}
           <button
@@ -58,7 +76,7 @@ function MarketCard({ market, isWatched, onToggleWatch, index }: {
               e.preventDefault();
               onToggleWatch();
             }}
-            className="absolute top-4 right-4 text-muted-foreground hover:text-primary transition-base cursor-pointer"
+            className="absolute top-[7.5rem] right-4 text-muted-foreground hover:text-primary transition-base cursor-pointer"
             aria-label={isWatched ? "Remove from watchlist" : "Add to watchlist"}
           >
             <Star weight={isWatched ? "fill" : "regular"} className={`h-4 w-4 ${isWatched ? "text-primary" : ""}`} />
@@ -429,6 +447,22 @@ export default function MarketsPage() {
                   href={`/markets/${market.id}`}
                   className="flex items-center gap-4 p-4 hover:bg-secondary/50 transition-colors"
                 >
+                  {/* Small image thumbnail */}
+                  <div className="relative w-10 h-10 rounded-md overflow-hidden bg-secondary/70 shrink-0 hidden sm:block">
+                    {market.image ? (
+                      <Image
+                        src={market.image}
+                        alt=""
+                        fill
+                        className="object-cover"
+                        sizes="40px"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Newspaper className="h-4 w-4 text-muted-foreground/40" />
+                      </div>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <Badge variant="outline" className="text-caption">
