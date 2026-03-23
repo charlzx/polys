@@ -8,6 +8,10 @@ import type { TransformedMarket } from "@/services/polymarket";
 
 const GAMMA_URL = "https://gamma-api.polymarket.com/markets";
 
+// Module-level cache: persists across requests within the same server process.
+// Keys are "polyMarketId:kalshiTicker" pairs; values are first-seen timestamps.
+const timestampCache = new Map<string, Date>();
+
 interface GammaMarket {
   id: string;
   question?: string;
@@ -67,14 +71,19 @@ async function fetchPolymarketServer(): Promise<TransformedMarket[]> {
 }
 
 export async function GET() {
+  const emptyStats = [
+    { label: "Opportunities Found", value: "0" },
+    { label: "Average Profit", value: "0%" },
+    { label: "Total Value Detected", value: "$0" },
+  ];
+
   try {
     const [polyMarkets, kalshiMarkets] = await Promise.all([
       fetchPolymarketServer(),
       fetchKalshiEventsServer(),
     ]);
 
-    const detectedAt = new Date();
-    const result = detectArbitrage(polyMarkets, kalshiMarkets, detectedAt);
+    const result = detectArbitrage(polyMarkets, kalshiMarkets, timestampCache);
 
     return NextResponse.json(result, {
       headers: {
@@ -83,13 +92,7 @@ export async function GET() {
     });
   } catch (err) {
     console.error("Arbitrage API error:", err);
-    return NextResponse.json(
-      { opportunities: [], stats: [
-        { label: "Opportunities Found", value: "0" },
-        { label: "Average Profit", value: "0%" },
-        { label: "Total Value Detected", value: "$0" },
-      ] },
-      { status: 200 } // Return empty result rather than 502 to avoid UI errors
-    );
+    // Return empty result rather than 502 to avoid UI error state
+    return NextResponse.json({ opportunities: [], stats: emptyStats }, { status: 200 });
   }
 }

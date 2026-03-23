@@ -326,12 +326,12 @@ export default function ArbitragePage() {
                                       <div className="space-y-1 text-caption">
                                         <div>
                                           Buy YES on {opp.platform2} at {opp.odds2}¢: $
-                                          {((opp.odds2 / 100) * opp.capital).toFixed(0)}
+                                          {opp.yesCost.toLocaleString()}
                                         </div>
                                         <div>
                                           Buy NO on {opp.platform1} at{" "}
                                           {100 - opp.odds1}¢: $
-                                          {(((100 - opp.odds1) / 100) * opp.capital).toFixed(0)}
+                                          {opp.noCost.toLocaleString()}
                                         </div>
                                       </div>
                                     </div>
@@ -340,11 +340,11 @@ export default function ArbitragePage() {
                                         Expected Outcome
                                       </div>
                                       <div className="space-y-1 text-caption">
-                                        <div>Total Capital: ${opp.capital.toLocaleString()}</div>
+                                        <div>Capital deployed: ${opp.capital.toLocaleString()}</div>
+                                        <div>Guaranteed payout: ${opp.expectedReturn.toLocaleString()}</div>
                                         <div className="text-success font-medium">
-                                          Locked-in Profit: $
-                                          {(opp.expectedReturn - opp.capital).toFixed(0)} (
-                                          {opp.profit}%)
+                                          Locked-in profit: $
+                                          {(opp.expectedReturn - opp.capital).toLocaleString()} ({opp.profit}%)
                                         </div>
                                       </div>
                                     </div>

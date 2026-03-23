@@ -1,6 +1,6 @@
 // Kalshi Trade API v2 types and server-side fetching
 
-const KALSHI_EVENTS_URL = "https://api.elections.kalshi.com/trade-api/v2/events";
+const BASE_URL = "https://api.elections.kalshi.com/trade-api/v2";
 
 export interface KalshiMarket {
   ticker: string;
@@ -21,6 +21,17 @@ export interface KalshiEvent {
   title: string;
   category: string;
   markets?: KalshiMarket[];
+}
+
+export interface KalshiOrderBookEntry {
+  price: string;
+  quantity: number;
+}
+
+export interface KalshiOrderBook {
+  ticker: string;
+  yes: KalshiOrderBookEntry[];
+  no: KalshiOrderBookEntry[];
 }
 
 export interface FlatKalshiMarket {
@@ -44,13 +55,35 @@ export function kalshiMid(market: KalshiMarket): number {
   return (bid + ask) / 2;
 }
 
+// Fetch a single Kalshi market by ticker (server-side)
+export async function fetchKalshiMarketServer(ticker: string): Promise<KalshiMarket | null> {
+  const res = await fetch(`${BASE_URL}/markets/${encodeURIComponent(ticker)}`, {
+    headers: { Accept: "application/json" },
+    next: { revalidate: 30 },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return (data.market as KalshiMarket) ?? null;
+}
+
+// Fetch the order book for a Kalshi market ticker (server-side)
+export async function fetchKalshiOrderbookServer(ticker: string): Promise<KalshiOrderBook | null> {
+  const res = await fetch(`${BASE_URL}/markets/${encodeURIComponent(ticker)}/orderbook`, {
+    headers: { Accept: "application/json" },
+    next: { revalidate: 10 },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return (data.orderbook as KalshiOrderBook) ?? null;
+}
+
 // Fetch up to 3 pages of Kalshi events with nested markets (server-side)
 export async function fetchKalshiEventsServer(): Promise<FlatKalshiMarket[]> {
   const allEvents: KalshiEvent[] = [];
   let cursor: string | undefined;
 
   for (let page = 0; page < 3; page++) {
-    const url = new URL(KALSHI_EVENTS_URL);
+    const url = new URL(`${BASE_URL}/events`);
     url.searchParams.set("limit", "100");
     url.searchParams.set("with_nested_markets", "true");
     url.searchParams.set("status", "open");
