@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +64,13 @@ const mockNotifications = [
 
 export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen }: PublicHeaderProps) {
   const { user, isAuthenticated, logout } = useAuth();
+  const router = useRouter();
   const [notifications] = useState(mockNotifications);
+
+  const handleSignOut = async () => {
+    await logout();
+    router.push("/login");
+  };
   const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
@@ -197,7 +204,7 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive">
+                    <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
                       <SignOut weight="bold" className="mr-2 h-4 w-4" />
                       Sign out
                     </DropdownMenuItem>

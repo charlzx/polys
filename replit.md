@@ -39,6 +39,18 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - Category detection uses event tickers (e.g., `cbb-`, `nba-`) + keyword matching with word boundaries
 - `TransformedMarket` extended with `yesTokenId`, `noTokenId`, `conditionId`
 
+## Authentication (Task #2 — COMPLETE)
+- **Provider**: Supabase (`@supabase/supabase-js` + `@supabase/ssr`)
+- **Client**: `lib/supabase/client.ts` — browser-side `createBrowserClient`
+- **Server**: `lib/supabase/server.ts` — server-side `createServerClient` with cookie store
+- **Session refresh**: `proxy.ts` (Next.js 16 proxy convention) — refreshes Supabase auth tokens on every request
+- **Hook**: `hooks/useAuth.ts` — real `signInWithPassword` / `signUp` / `signOut`; exposes `{ user, isAuthenticated, isLoading, login, signup, logout }`
+- **Login**: `app/login/page.tsx` — email+password form wired to `login(email, password)`, shows inline errors
+- **Signup**: `app/signup/page.tsx` — name+email+password form wired to `signup(email, password, name)`, handles email confirmation flow
+- **AppHeader**: uses real `user` from `useAuth()` — no more hardcoded "Alex Chen"; sign-out redirects to `/login`
+- **PublicHeader**: same pattern — `handleSignOut` async logout + redirect
+- **Env secrets required**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
 - **Build**: `pnpm run build`
@@ -47,4 +59,4 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 ## Replit Configuration
 - Dev server runs on port 5000 with host `0.0.0.0` for Replit preview pane compatibility
 - Workflow: "Start application" → `pnpm run dev`
-- No external environment variables required
+- Required secrets: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { createClient } from "@/lib/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 
 export interface User {
   id: string;
@@ -10,55 +12,74 @@ export interface User {
   tier: "free" | "pro" | "premium";
 }
 
-// Helper to get initial auth state
-function getInitialAuthState(): { user: User | null; isAuthenticated: boolean } {
-  if (typeof window === 'undefined') {
-    return { user: null, isAuthenticated: false };
-  }
-  
-  try {
-    const mockUser = localStorage.getItem("polys-mock-user");
-    if (mockUser) {
-      const userData = JSON.parse(mockUser);
-      return { user: userData, isAuthenticated: true };
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return { user: null, isAuthenticated: false };
+function sessionToUser(session: Session | null): User | null {
+  if (!session?.user) return null;
+  const u = session.user;
+  const meta = u.user_metadata ?? {};
+  return {
+    id: u.id,
+    name: meta.name ?? meta.full_name ?? u.email?.split("@")[0] ?? "User",
+    email: u.email ?? "",
+    avatar: meta.avatar_url,
+    tier: (meta.tier as User["tier"]) ?? "free",
+  };
 }
 
-// Mock auth hook - replace with real auth later
 export function useAuth() {
-  const [authState, setAuthState] = useState(() => getInitialAuthState());
+  // Create one client instance per hook call; createBrowserClient reuses the same
+  // underlying GoTrue instance via a module-level singleton inside @supabase/ssr,
+  // so this is cheap and safe to call inside a hook.
+  const supabase = useMemo(() => createClient(), []);
+
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Recheck auth on mount (for SSR hydration)
   useEffect(() => {
-    const state = getInitialAuthState();
-    setAuthState(state);
-    setIsLoading(false);
-  }, []);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(sessionToUser(session));
+      setIsLoading(false);
+    });
 
-  const login = useCallback((userData: User) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem("polys-mock-user", JSON.stringify(userData));
-    }
-    setAuthState({ user: userData, isAuthenticated: true });
-  }, []);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(sessionToUser(session));
+      setIsLoading(false);
+    });
 
-  const logout = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem("polys-mock-user");
-    }
-    setAuthState({ user: null, isAuthenticated: false });
-  }, []);
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  const login = useCallback(
+    async (email: string, password: string): Promise<string | null> => {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      return error ? error.message : null;
+    },
+    [supabase]
+  );
+
+  const signup = useCallback(
+    async (email: string, password: string, name: string): Promise<string | null> => {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name, tier: "free" } },
+      });
+      return error ? error.message : null;
+    },
+    [supabase]
+  );
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
+  }, [supabase]);
 
   return {
-    user: authState.user,
-    isAuthenticated: authState.isAuthenticated,
+    user,
+    isAuthenticated: !!user,
     isLoading,
     login,
+    signup,
     logout,
   };
 }
