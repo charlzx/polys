@@ -29,6 +29,7 @@ import { useMarketIntelligence } from "@/services/ai";
 import { Sparkle } from "@phosphor-icons/react";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useArbitrage } from "@/hooks/useArbitrage";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -232,6 +233,7 @@ export default function DashboardPage() {
 
   const { stats, isLoading: statsLoading } = useDashboardStats(user?.id);
   const { alerts: userAlerts, isLoading: alertsLoading } = useAlerts(user?.id);
+  const { data: arbData } = useArbitrage();
 
   // Last 5 active or triggered alerts sorted by most recent activity
   const recentAlerts = useMemo(() => {
@@ -511,6 +513,35 @@ export default function DashboardPage() {
                     View All Alerts
                   </Link>
                 </Button>
+              </CollapsibleCard>
+
+              {/* Arbitrage condensed preview */}
+              <CollapsibleCard title="Arbitrage Opps" defaultOpen={true}>
+                {arbData?.opportunities?.filter((o) => o.status === "active").slice(0, 2).length ? (
+                  <div className="space-y-2">
+                    {arbData.opportunities
+                      .filter((o) => o.status === "active")
+                      .slice(0, 2)
+                      .map((opp) => (
+                        <div
+                          key={opp.id}
+                          className="p-3 rounded-lg bg-secondary/50 flex items-center justify-between gap-2"
+                        >
+                          <p className="text-small font-medium line-clamp-1 flex-1">{opp.market}</p>
+                          <Badge variant="secondary" className="text-caption text-success shrink-0">
+                            +{opp.profit.toFixed(1)}%
+                          </Badge>
+                        </div>
+                      ))}
+                    <Button variant="ghost" size="sm" asChild className="w-full">
+                      <Link href="/arbitrage" className="text-primary">View all</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-small text-muted-foreground text-center py-3">
+                    No active opportunities right now.
+                  </p>
+                )}
               </CollapsibleCard>
 
               {/* Live Feed */}

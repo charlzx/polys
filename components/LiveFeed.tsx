@@ -63,6 +63,8 @@ function FeedRow({ event }: { event: FeedEvent }) {
   const style = EVENT_STYLES[event.type];
   const Icon = style.icon;
 
+  const href = event.href ?? (event.marketId ? `/markets/${event.marketId}` : null);
+
   const inner = (
     <motion.div
       layout
@@ -70,7 +72,7 @@ function FeedRow({ event }: { event: FeedEvent }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="flex items-start gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer group"
+      className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${href ? "hover:bg-secondary/50 cursor-pointer group" : ""}`}
     >
       <div
         className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full mt-0.5 ${style.bg}`}
@@ -91,9 +93,9 @@ function FeedRow({ event }: { event: FeedEvent }) {
     </motion.div>
   );
 
-  if (event.marketId) {
+  if (href) {
     return (
-      <Link href={`/markets/${event.marketId}`} className="block">
+      <Link href={href} className="block">
         {inner}
       </Link>
     );
