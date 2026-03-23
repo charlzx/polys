@@ -232,9 +232,10 @@ export default function DashboardPage() {
   const { stats, isLoading: statsLoading } = useDashboardStats(user?.id);
   const { alerts: userAlerts, isLoading: alertsLoading } = useAlerts(user?.id);
 
-  // Last 5 alerts sorted by most recent activity
+  // Last 5 active or triggered alerts sorted by most recent activity
   const recentAlerts = useMemo(() => {
     return [...userAlerts]
+      .filter((a) => a.status === "active" || a.status === "triggered")
       .sort((a, b) => {
         const aTime = a.last_triggered_at ?? a.created_at;
         const bTime = b.last_triggered_at ?? b.created_at;

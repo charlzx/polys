@@ -91,7 +91,9 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell weight="regular" className="h-5 w-5" />
                   {notifCount > 0 && (
-                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary" />
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1">
+                      {notifCount > 9 ? "9+" : notifCount}
+                    </span>
                   )}
                   <span className="sr-only">Notifications</span>
                 </Button>
@@ -114,23 +116,32 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
                     </div>
                   ) : (
                     notifications.map((notification) => (
-                      <div
+                      <Link
                         key={notification.id}
-                        className="p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors cursor-pointer bg-primary/5"
+                        href="/alerts"
+                        onClick={() => setNotificationsOpen(false)}
+                        className="block p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors bg-primary/5"
                       >
                         <div className="flex items-start gap-2">
                           <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-small font-medium truncate">{notification.title}</p>
-                            <p className="text-caption text-muted-foreground line-clamp-2">
-                              {notification.description}
+                            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                {notification.alertType}
+                              </Badge>
+                              <span className="text-caption text-muted-foreground">
+                                {notification.timeAgo}
+                              </span>
+                            </div>
+                            <p className="text-small font-medium truncate">
+                              {notification.marketName ?? notification.title}
                             </p>
-                            <p className="text-caption text-muted-foreground mt-1">
-                              {notification.timeAgo}
+                            <p className="text-caption text-muted-foreground line-clamp-1 mt-0.5">
+                              {notification.description}
                             </p>
                           </div>
                         </div>
-                      </div>
+                      </Link>
                     ))
                   )}
                 </div>
