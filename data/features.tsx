@@ -5,13 +5,13 @@
 
 import { ChartBar, Shield, Bell, Stack } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import type { ComponentType } from "react";
 
 export interface Feature {
   icon: Icon;
   title: string;
   description: string;
-  preview?: ReactNode;
+  Preview?: ComponentType;
 }
 
 function AnalyticsPreview() {
@@ -37,7 +37,15 @@ function AnalyticsPreview() {
         <span className="text-[10px] font-medium text-success">+12.4%</span>
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-8" preserveAspectRatio="none">
-        <path d={pathD} fill="none" stroke="hsl(var(--success))" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+        <path
+          d={pathD}
+          fill="none"
+          style={{ stroke: "var(--color-success)" }}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.8"
+        />
       </svg>
     </div>
   );
@@ -104,24 +112,24 @@ export const features: Feature[] = [
     icon: ChartBar,
     title: "Real-time Analytics",
     description: "Track market odds and volume across multiple platforms with live updates.",
-    preview: AnalyticsPreview(),
+    Preview: AnalyticsPreview,
   },
   {
     icon: Shield,
     title: "Arbitrage Detection",
     description: "Automatically find pricing inefficiencies and profit opportunities.",
-    preview: ArbitragePreview(),
+    Preview: ArbitragePreview,
   },
   {
     icon: Bell,
     title: "Smart Alerts",
     description: "Get notified when markets move or hit your target prices.",
-    preview: AlertsPreview(),
+    Preview: AlertsPreview,
   },
   {
     icon: Stack,
     title: "Multi-platform",
     description: "Aggregate data from Polymarket, Kalshi, and more in one view.",
-    preview: MultiPlatformPreview(),
+    Preview: MultiPlatformPreview,
   },
 ];

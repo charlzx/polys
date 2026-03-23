@@ -92,7 +92,7 @@ function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; 
     >
       <Link
         href={`/markets/${market.id}`}
-        className="block rounded-xl bg-card border border-border hover:border-primary/40 hover:shadow-[0_0_20px_rgba(var(--primary-rgb,99,102,241),0.15)] transition-all group overflow-hidden min-h-[44px]"
+        className="block rounded-xl bg-card border border-border hover:border-primary/40 transition-all group overflow-hidden min-h-[44px]"
       >
         {/* Event image */}
         <div className="relative w-full h-28 bg-secondary/50">
@@ -270,7 +270,7 @@ function StackingFeatureCard({ feature, index }: { feature: typeof features[0]; 
         <div className="flex-1 min-w-0">
           <h3 className="text-subtitle font-semibold mb-2">{feature.title}</h3>
           <p className="text-small text-muted-foreground">{feature.description}</p>
-          {feature.preview && <div>{feature.preview}</div>}
+          {feature.Preview && <feature.Preview />}
         </div>
       </div>
     </motion.div>
@@ -346,7 +346,7 @@ export default function LandingPage() {
       {/* Hero Section — split layout */}
       <section
         ref={heroRef}
-        className="border-b border-border bg-gradient-to-b from-secondary/30 to-background"
+        className="border-b border-border bg-secondary/20"
       >
         <div className="container py-10 md:py-16">
           <div className="lg:grid lg:grid-cols-2 lg:gap-12 lg:items-center">
@@ -483,14 +483,14 @@ export default function LandingPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="p-6 rounded-2xl bg-card border border-border hover:border-primary/30 hover:shadow-[0_0_20px_rgba(var(--primary-rgb,99,102,241),0.12)] transition-all flex flex-col"
+                className="p-6 rounded-2xl bg-card border border-border hover:border-primary/30 transition-all flex flex-col"
               >
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <feature.icon weight="duotone" className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="text-subtitle font-semibold mb-2">{feature.title}</h3>
                 <p className="text-small text-muted-foreground">{feature.description}</p>
-                {feature.preview && <div className="mt-auto">{feature.preview}</div>}
+                {feature.Preview && <div className="mt-auto"><feature.Preview /></div>}
               </motion.div>
             ))}
           </div>
