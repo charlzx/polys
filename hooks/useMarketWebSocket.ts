@@ -452,7 +452,11 @@ export function useSingleMarketWebSocket(
             const events: ClobEvent[] = Array.isArray(raw) ? raw : [raw];
 
             events.forEach((msg) => {
-              if (msg.asset_id !== yesTokenId) return;
+              // For book events, the top-level asset_id identifies the token.
+              // For price_change events in the Sept-2025 schema, asset_id may be absent
+              // at the top level and only present per item in price_changes[].
+              // We let price_change events through and filter per-item below.
+              if (msg.event_type === "book" && msg.asset_id !== yesTokenId) return;
 
               if (msg.event_type === "book") {
                 const bookMsg = msg as ClobBookEvent;

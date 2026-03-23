@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use, useMemo } from "react";
+import { useState, use, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -181,6 +181,14 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
     market?.yesOdds,
     market?.yesTokenId
   );
+
+  // Periodic tick to re-evaluate staleness even when no other state changes occur
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!market?.yesTokenId) return;
+    const id = setInterval(() => setTick((t) => t + 1), 5_000);
+    return () => clearInterval(id);
+  }, [market?.yesTokenId]);
 
   // Stale data: if no WS update in 60s, data may be stale
   const isLiveDataStale = market?.yesTokenId
