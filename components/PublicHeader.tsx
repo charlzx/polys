@@ -90,9 +90,6 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
             <Link href="/markets" className="text-small text-muted-foreground hover:text-foreground transition-colors">
               Markets
             </Link>
-            <Link href="/news" className="text-small text-muted-foreground hover:text-foreground transition-colors">
-              News
-            </Link>
             <Link href="/dashboard" className="text-small text-muted-foreground hover:text-foreground transition-colors">
               Analytics
             </Link>

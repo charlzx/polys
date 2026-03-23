@@ -22,9 +22,8 @@ import {
   Broadcast,
   ArrowRight,
   Pulse,
-  Newspaper,
 } from "@phosphor-icons/react";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useRef } from "react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 
 // Single ticker item — defined outside component to avoid hook-violation during render
@@ -290,111 +289,14 @@ function StackingFeatureCard({ feature, index }: { feature: typeof features[0]; 
   );
 }
 
-interface NewsItem {
-  id: string;
-  slug: string;
-  question: string;
-  description: string;
-  image?: string;
-  yesOdds: number;
-  change24h: number;
-  volume: string;
-  volume24h: string;
-  category: string;
-}
-
-function NewsCard({ item, index }: { item: NewsItem; index: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.07 }}
-      className="shrink-0 w-72 sm:w-80"
-    >
-      <Link
-        href={`/news/${item.slug}`}
-        className="flex gap-3 rounded-xl bg-card border border-border hover:border-primary/40 hover:shadow-lg transition-all group overflow-hidden p-3 h-full"
-      >
-        {/* Text content */}
-        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-          <div className="flex items-center gap-1.5">
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-              {item.category}
-            </Badge>
-          </div>
-          <p className="text-small font-medium line-clamp-2 group-hover:text-primary transition-colors leading-snug">
-            {item.question}
-          </p>
-          {item.description && (
-            <p className="text-caption text-muted-foreground line-clamp-2 leading-snug">
-              {item.description}
-            </p>
-          )}
-          <div className="flex items-center gap-2 mt-auto pt-1">
-            <Badge
-              variant="secondary"
-              className={`text-[10px] px-1.5 py-0 font-semibold ${
-                item.yesOdds >= 60 ? "bg-success/15 text-success" :
-                item.yesOdds <= 40 ? "bg-destructive/15 text-destructive" :
-                ""
-              }`}
-            >
-              {item.yesOdds}% YES
-            </Badge>
-            {item.change24h !== 0 && (
-              <span className={`text-caption flex items-center gap-0.5 font-medium ${
-                item.change24h > 0 ? "text-success" : "text-destructive"
-              }`}>
-                {item.change24h > 0 ? (
-                  <TrendUpIcon weight="bold" className="h-3 w-3" />
-                ) : (
-                  <TrendDownIcon weight="bold" className="h-3 w-3" />
-                )}
-                {item.change24h > 0 ? "+" : ""}{item.change24h}%
-              </span>
-            )}
-            <span className="text-caption text-muted-foreground ml-auto">{item.volume}</span>
-          </div>
-        </div>
-
-        {/* Thumbnail */}
-        <div className="relative shrink-0 w-20 h-20 rounded-lg bg-secondary/50 overflow-hidden self-start">
-          {item.image ? (
-            <Image
-              src={item.image}
-              alt={item.question}
-              fill
-              className="object-cover"
-              sizes="80px"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Newspaper className="h-7 w-7 text-muted-foreground/30" />
-            </div>
-          )}
-        </div>
-      </Link>
-    </motion.div>
-  );
-}
-
 export default function LandingPage() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
-  
+
   // Hero animation ref
   const heroRef = useRef<HTMLDivElement>(null);
   const heroInView = useInView(heroRef, { once: true });
-
-  // Fetch news items
-  useEffect(() => {
-    fetch("/api/news?limit=8")
-      .then((r) => r.ok ? r.json() : [])
-      .then((data) => Array.isArray(data) ? setNewsItems(data.slice(0, 8)) : null)
-      .catch(() => null);
-  }, []);
 
   // Fetch market data
   const { data: markets, isLoading } = useMarkets({ limit: 20, active: true });
@@ -534,31 +436,6 @@ export default function LandingPage() {
           </motion.div>
         </div>
       </section>
-
-      {/* Latest News & Updates Section */}
-      {newsItems.length > 0 && (
-        <section className="py-10 border-b border-border bg-secondary/20">
-          <div className="container">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2">
-                <Newspaper weight="duotone" className="h-5 w-5 text-primary" />
-                <h2 className="text-subtitle font-semibold">Latest News & Updates</h2>
-              </div>
-              <Link
-                href="/news"
-                className="text-small text-primary hover:underline flex items-center gap-1"
-              >
-                See all <CaretRight weight="bold" className="h-4 w-4" />
-              </Link>
-            </div>
-            <div className="flex gap-4 overflow-x-auto pb-3 scrollbar-hide -mx-4 px-4">
-              {newsItems.map((item, index) => (
-                <NewsCard key={item.id} item={item} index={index} />
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Features Section */}
       <section className="py-16 md:py-24 border-b border-border">
