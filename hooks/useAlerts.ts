@@ -66,6 +66,27 @@ export function useAlerts(userId: string | undefined) {
       if (!userId) return "Not authenticated";
 
       const conditionText = buildConditionText(input);
+      // For "new market" alerts, seed seen_market_ids from the current market list so only
+      // markets that appear AFTER this alert is created will fire the notification.
+      let seenMarketIds: string[] = [];
+      if (input.alert_type === "new" && input.market_name) {
+        try {
+          const res = await fetch(
+            `/api/markets?limit=200&active=true&order=volume24hr&ascending=false`
+          );
+          if (res.ok) {
+            const data = (await res.json()) as { markets?: { id: string; question: string }[] };
+            const keyword = input.market_name.toLowerCase();
+            const markets = Array.isArray(data.markets) ? data.markets : (data as unknown as { id: string; question: string }[]);
+            seenMarketIds = markets
+              .filter((m) => m.question.toLowerCase().includes(keyword))
+              .map((m) => m.id);
+          }
+        } catch {
+          // Non-fatal: alert still created, may fire once on first check for existing matches
+        }
+      }
+
       const { error: err } = await supabase.from("alerts").insert({
         user_id: userId,
         name: input.name,
@@ -75,7 +96,7 @@ export function useAlerts(userId: string | undefined) {
         threshold: input.threshold,
         delivery_email: input.delivery_email,
         status: "active",
-        seen_market_ids: [],
+        seen_market_ids: seenMarketIds,
       });
 
       if (err) return err.message;

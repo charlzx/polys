@@ -61,15 +61,21 @@ export async function POST(request: Request) {
   );
 
   const subject = `[Polys] ${payload.alertName} — ${payload.changeText}`;
-  // Sender: use verified domain via ALERTS_FROM_EMAIL env var, or fall back to Resend default.
-  // Resend onboarding@resend.dev only delivers to the account owner; set a verified domain email
-  // in ALERTS_FROM_EMAIL (e.g., "alerts@yourdomain.com") for full user delivery.
-  const from =
-    process.env.ALERTS_FROM_EMAIL ?? "Polys Alerts <onboarding@resend.dev>";
+  // ALERTS_FROM_EMAIL must be set to a Resend-verified domain email for delivery to all users.
+  // Without it, Resend's onboarding sender restricts delivery to the account owner only.
+  const from = process.env.ALERTS_FROM_EMAIL;
+  if (!from) {
+    console.warn(
+      "[alerts/send] ALERTS_FROM_EMAIL is not set. " +
+      "Falling back to onboarding@resend.dev — emails will only deliver to the Resend account owner. " +
+      "Set ALERTS_FROM_EMAIL to a verified domain sender (e.g., alerts@yourdomain.com)."
+    );
+  }
+  const sender = from ?? "Polys Alerts <onboarding@resend.dev>";
 
   const resend = new Resend(apiKey);
   const { data, error } = await resend.emails.send({
-    from,
+    from: sender,
     to: [payload.to],
     subject,
     html,
