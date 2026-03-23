@@ -154,6 +154,16 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
   - All images use Next.js `Image`; `remotePatterns` in `next.config.ts` allows Polymarket S3 + polymarket.com hostnames
 - **Note**: News section (`/news`, `/news/[slug]`, `/api/news`) was removed — it was surfacing the same top Polymarket markets as the Markets page, adding no new information. Navigation reflects this: PublicHeader shows Markets, Analytics, Arbitrage; AppHeader has 7 tabs without News.
 
+## Live Activity Feed (Task #13 — COMPLETE)
+- **`hooks/useLiveFeed.ts`**: `useLiveFeed(limit)` hook merging three event sources:
+  - Whale trades (from `useWhaleActivity`): buy/sell events with amount and outcome
+  - Price movements (from `useMarkets`): markets with `|change24h| >= 5%` shown as up/down events
+  - Upcoming resolutions: markets resolving within 48h flagged as milestone events
+  - Events sorted newest first; deduplicated by stable `id`; capped at `limit`
+- **`components/LiveFeed.tsx`**: Animated feed component using Framer Motion `AnimatePresence`; type-specific icon + color per event type (price_up = green, price_down = red, whale = violet, milestone = primary); compact mode (3 events, no scroll cap) and full mode (scroll-capped at 400px); pulsing "Live" badge; loading skeletons
+- **Dashboard sidebar**: Blurred "Arbitrage Opps" placeholder card replaced by "Live Feed" `CollapsibleCard` (12 events, `showHeader=false`); "View Whale Activity" CTA links to `/whales`
+- **Landing page hero**: "Happening Now" strip below CTA buttons shows 3 most recent feed events in a frosted card with compact `LiveFeed`; animates in with hero section
+
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
 - **Build**: `pnpm run build`

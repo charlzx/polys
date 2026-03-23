@@ -13,6 +13,7 @@ import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import type { TransformedMarket } from "@/services/polymarket";
 import { features } from "@/data/features";
 import { categories } from "@/data/categories";
+import { LiveFeed } from "@/components/LiveFeed";
 import {
   MagnifyingGlass,
   TrendUpIcon,
@@ -22,6 +23,7 @@ import {
   Broadcast,
   ArrowRight,
   Pulse,
+  Newspaper,
 } from "@phosphor-icons/react";
 import { useState, useMemo, useRef } from "react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
@@ -422,6 +424,20 @@ export default function LandingPage() {
               <Button variant="outline" size="lg" asChild>
                 <Link href="/dashboard">View dashboard</Link>
               </Button>
+            </motion.div>
+
+            {/* Happening Now strip */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={heroInView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.6, delay: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="mt-8 p-4 rounded-xl border border-border bg-card/60 backdrop-blur-sm max-w-md"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <Lightning weight="fill" className="h-3.5 w-3.5 text-primary" />
+                <span className="text-caption font-semibold text-muted-foreground uppercase tracking-wide">Happening Now</span>
+              </div>
+              <LiveFeed limit={3} showHeader={false} compact={true} />
             </motion.div>
           </div>
 

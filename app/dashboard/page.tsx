@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMarkets } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import { WhaleActivityFeed } from "@/components/WhaleActivityFeed";
+import { LiveFeed } from "@/components/LiveFeed";
 import { useMarketIntelligence } from "@/services/ai";
 import { Sparkle } from "@phosphor-icons/react";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
@@ -512,34 +513,24 @@ export default function DashboardPage() {
                 </Button>
               </CollapsibleCard>
 
-              <Card className="relative overflow-hidden">
-                <CardHeader className="flex flex-row items-center justify-between p-4 md:p-5 pb-3">
-                  <CardTitle className="text-subtitle">Arbitrage Opps</CardTitle>
-                  <Badge className="text-caption">Pro</Badge>
-                </CardHeader>
-                <CardContent className="p-4 md:p-5 pt-0">
-                  <div className="space-y-3 filter blur-sm">
-                    <div className="p-3 md:p-4 rounded-lg bg-secondary/50">
-                      <p className="text-body font-medium">Bitcoin &gt;$100k</p>
-                      <p className="text-small text-success">8.3% profit potential</p>
-                    </div>
-                    <div className="p-3 md:p-4 rounded-lg bg-secondary/50">
-                      <p className="text-body font-medium">ETH &gt;$4,000</p>
-                      <p className="text-small text-success">5.2% profit potential</p>
-                    </div>
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-[2px]">
-                    <div className="text-center p-6">
-                      <p className="text-body font-medium mb-3">
-                        Upgrade to Pro to unlock
-                      </p>
-                      <Button size="sm" asChild>
-                        <Link href="/pricing">View Plans</Link>
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Live Feed */}
+              <CollapsibleCard
+                title="Live Feed"
+                defaultOpen={true}
+                badge={
+                  <Badge variant="secondary" className="text-caption gap-1 px-2 py-0.5">
+                    <Broadcast weight="fill" className="h-2.5 w-2.5 text-success animate-pulse" />
+                    Live
+                  </Badge>
+                }
+              >
+                <LiveFeed limit={12} showHeader={false} />
+                <Button variant="ghost" size="sm" asChild className="w-full mt-3">
+                  <Link href="/whales" className="text-primary">
+                    View Whale Activity
+                  </Link>
+                </Button>
+              </CollapsibleCard>
 
               {/* Market Intelligence widget */}
               <Card>
