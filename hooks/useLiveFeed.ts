@@ -58,13 +58,23 @@ export function useLiveFeed(limit = 20): {
   const { data: arbData, isLoading: arbLoading } = useArbitrage();
 
   // Subscribe WebSocket to top markets for real-time price spikes
-  const marketIds = useMemo(
-    () => markets?.map((m) => m.id).slice(0, 20) ?? [],
-    [markets]
-  );
+  // Prefer tokenPairs (CLOB WebSocket) when yesTokenId is available; fall back to marketIds (REST polling)
+  const { tokenPairs, marketIds } = useMemo(() => {
+    const slice = markets?.slice(0, 20) ?? [];
+    const withToken = slice.filter((m) => m.yesTokenId);
+    if (withToken.length > 0) {
+      return {
+        tokenPairs: withToken.map((m) => ({ marketId: m.id, yesTokenId: m.yesTokenId! })),
+        marketIds: [] as string[],
+      };
+    }
+    return { tokenPairs: [], marketIds: slice.map((m) => m.id) };
+  }, [markets]);
+
   const { updates: wsUpdates } = useMarketWebSocket({
     marketIds,
-    enabled: marketIds.length > 0,
+    tokenPairs,
+    enabled: tokenPairs.length > 0 || marketIds.length > 0,
   });
 
   // Build lookup: conditionId → marketId for whale event resolution
@@ -103,7 +113,12 @@ export function useLiveFeed(limit = 20): {
         const mId =
           (a.conditionId ? conditionToMarketId.get(a.conditionId) : undefined)
           ?? findMarketByTitle(a.title);
-        if (!mId) continue; // skip if no market link can be resolved
+        if (!mId) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn(`[useLiveFeed] Whale event dropped — no market link for: "${a.title}" (conditionId: ${a.conditionId ?? "none"})`);
+          }
+          continue;
+        }
         const isBuy = a.side === "BUY";
         all.push({
           id: `whale-${a.id}`,
