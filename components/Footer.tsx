@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
-const navLinks = [
+const productLinks = [
   { label: "Markets", href: "/markets" },
   { label: "Analytics", href: "/dashboard" },
   { label: "Arbitrage", href: "/arbitrage" },
   { label: "Pricing", href: "/pricing" },
+];
+
+const companyLinks = [
+  { label: "About", href: "/about" },
+  { label: "Blog", href: "/blog" },
+  { label: "Terms", href: "/terms" },
+  { label: "Privacy", href: "/privacy" },
 ];
 
 export function Footer() {
@@ -13,47 +20,61 @@ export function Footer() {
 
   return (
     <footer className="border-t border-border bg-card/50">
-      <div className="container py-4">
-        {/* Strip: two rows on mobile, single row on sm+ */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-0">
-          {/* Row 1 on mobile: logo + tagline (left) and theme toggle (right) */}
-          <div className="flex items-center justify-between sm:flex-1">
-            <div className="flex items-center gap-2">
-              <Link href="/" className="text-subtitle font-bold">
-                Polys
-              </Link>
-              <span className="text-small text-muted-foreground">
-                — Prediction market intelligence
-              </span>
-            </div>
-            <div className="sm:hidden">
+      <div className="container py-10 md:py-12">
+        {/* Three-column grid on desktop, stacked on mobile */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6">
+          {/* Brand column */}
+          <div className="flex flex-col gap-4">
+            <Link href="/" className="text-subtitle font-bold">
+              Polys
+            </Link>
+            <p className="text-small text-muted-foreground max-w-xs">
+              Real-time prediction market intelligence across Polymarket and Kalshi.
+            </p>
+            <div className="mt-auto pt-2">
               <ThemeToggle variant="full" />
             </div>
           </div>
 
-          {/* Row 2 on mobile: centered nav links */}
-          <nav className="flex items-center justify-center gap-5 sm:flex-1">
-            {navLinks.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className="text-small text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+          {/* Product links */}
+          <div>
+            <h4 className="text-small font-semibold mb-4 text-foreground">Product</h4>
+            <ul className="space-y-2.5">
+              {productLinks.map((link) => (
+                <li key={link.label}>
+                  <Link
+                    href={link.href}
+                    className="text-small text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
 
-          {/* Theme toggle on right — only visible sm+ */}
-          <div className="hidden sm:flex sm:flex-1 sm:justify-end">
-            <ThemeToggle variant="full" />
+          {/* Company links */}
+          <div>
+            <h4 className="text-small font-semibold mb-4 text-foreground">Company</h4>
+            <ul className="space-y-2.5">
+              {companyLinks.map((link) => (
+                <li key={link.label}>
+                  <Link
+                    href={link.href}
+                    className="text-small text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 
-        {/* Copyright */}
-        <div className="mt-4 pt-4 border-t border-border">
-          <p className="text-caption text-muted-foreground text-center sm:text-left">
-            {currentYear} Polys. All rights reserved.
+        {/* Copyright strip */}
+        <div className="mt-10 pt-6 border-t border-border">
+          <p className="text-caption text-muted-foreground">
+            &copy; {currentYear} Polys. All rights reserved.
           </p>
         </div>
       </div>

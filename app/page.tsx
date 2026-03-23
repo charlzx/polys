@@ -217,26 +217,6 @@ function MarketRow({ market, rank }: { market: TransformedMarket; rank: number }
   );
 }
 
-// Stats ticker component
-function StatsTicker() {
-  return (
-    <div className="flex items-center gap-8 text-small">
-      <div className="flex items-center gap-2">
-        <span className="text-muted-foreground">Markets Tracked</span>
-        <span className="font-mono font-semibold">2,847</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-muted-foreground">24h Volume</span>
-        <span className="font-mono font-semibold">42.3M</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-muted-foreground">Active Users</span>
-        <span className="font-mono font-semibold">18.2K</span>
-      </div>
-    </div>
-  );
-}
-
 // Stacking Feature Card Component with improved animation (mobile)
 function StackingFeatureCard({ feature, index }: { feature: typeof features[0]; index: number }) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -443,16 +423,6 @@ export default function LandingPage() {
               <MarketPulseGrid markets={liveMarkets} />
             </motion.div>
           </div>
-
-          {/* Stats ticker - desktop only */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={heroInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.6, delay: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="hidden lg:flex items-center gap-8 mt-12 pt-8 border-t border-border/50"
-          >
-            <StatsTicker />
-          </motion.div>
         </div>
       </section>
 

@@ -37,35 +37,10 @@ interface PublicHeaderProps {
   onMobileNavOpen?: () => void;
 }
 
-// Mock notifications - same as AppHeader
-const mockNotifications = [
-  {
-    id: "1",
-    title: "Market Alert",
-    message: "Bitcoin ETF approval odds increased to 87%",
-    time: "2m ago",
-    unread: true,
-  },
-  {
-    id: "2",
-    title: "Arbitrage Opportunity",
-    message: "3.2% spread detected on Election market",
-    time: "15m ago",
-    unread: true,
-  },
-  {
-    id: "3",
-    title: "Price Alert",
-    message: "Your watched market reached target price",
-    time: "1h ago",
-    unread: false,
-  },
-];
-
 export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen = () => {} }: PublicHeaderProps) {
   const { user, isAuthenticated, logout } = useAuth();
   const router = useRouter();
-  const [notifications] = useState(mockNotifications);
+  const [notifications] = useState<{ id: string; title: string; message: string; time: string; unread: boolean }[]>([]);
 
   const handleSignOut = async () => {
     await logout();
@@ -79,7 +54,7 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
         <div className="flex h-14 items-center justify-between gap-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
               <span className="text-primary-foreground text-small font-bold">P</span>
             </div>
             <span className="text-subtitle font-bold hidden sm:inline">Polys</span>
@@ -137,29 +112,39 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
                       )}
                     </div>
                     <div className="max-h-[400px] overflow-y-auto">
-                      {notifications.map((notification) => (
-                        <div
-                          key={notification.id}
-                          className={`p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors cursor-pointer ${
-                            notification.unread ? "bg-secondary/30" : ""
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-small font-medium">{notification.title}</span>
-                                {notification.unread && (
-                                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                                )}
+                      {notifications.length === 0 ? (
+                        <div className="p-8 text-center">
+                          <Bell className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+                          <p className="text-small text-muted-foreground">No notifications yet</p>
+                          <p className="text-caption text-muted-foreground/60 mt-1">
+                            You&apos;ll see alerts and market updates here
+                          </p>
+                        </div>
+                      ) : (
+                        notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className={`p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors cursor-pointer ${
+                              notification.unread ? "bg-secondary/30" : ""
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-small font-medium">{notification.title}</span>
+                                  {notification.unread && (
+                                    <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                                  )}
+                                </div>
+                                <p className="text-caption text-muted-foreground">{notification.message}</p>
+                                <span className="text-caption text-muted-foreground/70 mt-1">
+                                  {notification.time}
+                                </span>
                               </div>
-                              <p className="text-caption text-muted-foreground">{notification.message}</p>
-                              <span className="text-caption text-muted-foreground/70 mt-1">
-                                {notification.time}
-                              </span>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </PopoverContent>
                 </Popover>
