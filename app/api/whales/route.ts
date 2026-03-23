@@ -19,6 +19,8 @@ const TRACKED_WALLETS = [
 
 export const runtime = "edge";
 
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
 function safeNum(v: unknown): number {
   if (v === null || v === undefined || v === "") return 0;
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
@@ -28,7 +30,7 @@ function safeNum(v: unknown): number {
 async function fetchWalletData(address: string) {
   const [posRes, actRes, valRes] = await Promise.allSettled([
     fetch(`${DATA_API}/positions?user=${address}&sizeThreshold=0&limit=50`),
-    fetch(`${DATA_API}/activity?user=${address}&limit=50`),
+    fetch(`${DATA_API}/activity?user=${address}&limit=200`),
     fetch(`${DATA_API}/value?user=${address}`),
   ]);
 
@@ -50,17 +52,35 @@ async function fetchWalletData(address: string) {
     portfolioValue = safeNum(arr[0]?.value);
   }
 
-  // Derive metrics from real data
   const typedAct = activity as Array<Record<string, unknown>>;
   const typedPos = positions as Array<Record<string, unknown>>;
 
-  const totalVolume = typedAct.reduce((s, a) => s + Math.abs(safeNum(a.usdcSize ?? a.amount)), 0);
+  // Filter activity to the last 30 days for volume ranking
+  const cutoff = Date.now() - THIRTY_DAYS_MS;
+  const recentAct = typedAct.filter((a) => {
+    const ts = a.timestamp ?? a.createdAt ?? "";
+    const t = new Date(String(ts)).getTime();
+    return !isNaN(t) && t >= cutoff;
+  });
+
+  // 30-day volume is the primary ranking metric
+  const totalVolume = recentAct.reduce(
+    (s, a) => s + Math.abs(safeNum(a.usdcSize ?? a.amount)),
+    0
+  );
+
   const openPositions = typedPos.filter((p) => safeNum(p.size) > 0).length;
   const resolved = typedPos.filter((p) => safeNum(p.cashPnl) !== 0);
   const wins = resolved.filter((p) => safeNum(p.cashPnl) > 0).length;
   const winRate = resolved.length > 0 ? Math.round((wins / resolved.length) * 100) : 0;
 
-  const recentTrades = typedAct.slice(0, 3).map((a) => ({
+  const sortedAct = [...typedAct].sort(
+    (a, b) =>
+      new Date(String(b.timestamp ?? 0)).getTime() -
+      new Date(String(a.timestamp ?? 0)).getTime()
+  );
+
+  const recentTradesList = sortedAct.slice(0, 3).map((a) => ({
     title: String(a.title ?? a.question ?? ""),
     side: String(a.side ?? "BUY"),
     outcome: String(a.outcome ?? "YES"),
@@ -68,16 +88,7 @@ async function fetchWalletData(address: string) {
     timestamp: String(a.timestamp ?? ""),
   }));
 
-  const lastActive =
-    typedAct.length > 0
-      ? String(
-          typedAct.sort(
-            (a, b) =>
-              new Date(String(b.timestamp ?? 0)).getTime() -
-              new Date(String(a.timestamp ?? 0)).getTime()
-          )[0]?.timestamp ?? ""
-        )
-      : null;
+  const lastActive = sortedAct.length > 0 ? String(sortedAct[0]?.timestamp ?? "") : null;
 
   return {
     address,
@@ -86,7 +97,7 @@ async function fetchWalletData(address: string) {
     winRate,
     openPositions,
     recentTrades: typedAct.length,
-    recentTradesList: recentTrades,
+    recentTradesList,
     lastActive,
     hasData: portfolioValue > 0 || typedAct.length > 0 || typedPos.length > 0,
   };
@@ -97,22 +108,23 @@ export async function GET(request: Request) {
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "10"), 20);
 
   try {
-    // Fetch data for each tracked wallet in parallel
-    const results = await Promise.allSettled(
-      TRACKED_WALLETS.slice(0, limit).map(fetchWalletData)
-    );
+    // Fetch ALL tracked wallets, then rank, then slice to limit
+    const results = await Promise.allSettled(TRACKED_WALLETS.map(fetchWalletData));
 
     const whales = results
-      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchWalletData>>> =>
-        r.status === "fulfilled"
+      .filter(
+        (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchWalletData>>> =>
+          r.status === "fulfilled"
       )
       .map((r) => r.value)
+      // Sort by 30-day volume descending; wallets with any data rank above those with none
       .sort((a, b) => {
-        // Wallets with data rank first; within data-wallets, sort by portfolio value
         if (a.hasData && !b.hasData) return -1;
         if (!a.hasData && b.hasData) return 1;
-        return b.portfolioValue - a.portfolioValue;
-      });
+        return b.totalVolume - a.totalVolume;
+      })
+      // Apply limit AFTER ranking the full universe
+      .slice(0, limit);
 
     return NextResponse.json({ whales });
   } catch (err) {
