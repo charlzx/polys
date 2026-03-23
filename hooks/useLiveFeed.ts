@@ -134,7 +134,7 @@ export function useLiveFeed(limit = 20): {
     if (markets) {
       const marketMap = new Map(markets.map((m) => [m.id, m]));
 
-      // WebSocket real-time price spikes (>3% session move)
+      // WebSocket real-time price spikes: >3% intra-session move since last observed price
       for (const [id, update] of wsUpdates.entries()) {
         if (Math.abs(update.priceChange) > 3) {
           const market = marketMap.get(id);
@@ -151,7 +151,7 @@ export function useLiveFeed(limit = 20): {
         }
       }
 
-      // 24h price movers (>3%) — stable deterministic timestamps
+      // 24h price movers (>3% rolling 24h change from Polymarket REST) — stable deterministic timestamps
       const wsCoveredIds = new Set(
         [...wsUpdates.entries()]
           .filter(([, u]) => Math.abs(u.priceChange) > 3)

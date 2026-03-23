@@ -157,7 +157,8 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 ## Live Activity Feed (Task #13 — COMPLETE)
 - **`hooks/useLiveFeed.ts`**: `useLiveFeed(limit)` hook merging three event sources:
   - Whale trades (from `useWhaleActivity`): buy/sell events with amount and outcome
-  - Price movements (from `useMarkets`): markets with `|change24h| >= 5%` shown as up/down events
+  - Price movements (from `useMarkets`): markets with `|change24h| > 3%` shown as up/down events (top 30 by volume)
+  - WebSocket real-time spikes: markets where CLOB session price change exceeds `>3%` (top 20 markets by volume, CLOB tokenPairs when available)
   - Upcoming resolutions: markets resolving within 48h flagged as milestone events
   - Events sorted newest first; deduplicated by stable `id`; capped at `limit`
 - **`components/LiveFeed.tsx`**: Animated feed component using Framer Motion `AnimatePresence`; type-specific icon + color per event type (price_up = green, price_down = red, whale = violet, milestone = primary); compact mode (3 events, no scroll cap) and full mode (scroll-capped at 400px); pulsing "Live" badge; loading skeletons
