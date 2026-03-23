@@ -19,8 +19,7 @@ export interface FeedEvent {
   type: FeedEventType;
   title: string;
   subtitle: string;
-  marketId?: string;
-  href?: string;
+  marketId: string;
   timestamp: number;
 }
 
@@ -34,6 +33,19 @@ function truncate(text: string, max = 50): string {
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
 }
 
+// Jaccard similarity for lightweight title matching (same stop-word set as arbitrage service)
+const STOP_WORDS = new Set(["will","a","an","the","in","of","to","be","is","for","by","at","on","from","or","and","not","if","that","this","which","it","as"]);
+function tokenize(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase().split(/\W+/).filter((t) => t.length > 2 && !STOP_WORDS.has(t))
+  );
+}
+function jaccard(a: Set<string>, b: Set<string>): number {
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter || 1);
+}
+
 export function useLiveFeed(limit = 20): {
   events: FeedEvent[];
   isLoading: boolean;
@@ -45,7 +57,7 @@ export function useLiveFeed(limit = 20): {
   });
   const { data: arbData, isLoading: arbLoading } = useArbitrage();
 
-  // Subscribe WebSocket to top markets from the REST list for real-time price spikes
+  // Subscribe WebSocket to top markets for real-time price spikes
   const marketIds = useMemo(
     () => markets?.map((m) => m.id).slice(0, 20) ?? [],
     [markets]
@@ -55,35 +67,66 @@ export function useLiveFeed(limit = 20): {
     enabled: marketIds.length > 0,
   });
 
+  // Build lookup: conditionId → marketId for whale event resolution
+  const conditionToMarketId = useMemo(() => {
+    if (!markets) return new Map<string, string>();
+    const map = new Map<string, string>();
+    for (const m of markets) {
+      if (m.conditionId) map.set(m.conditionId, m.id);
+    }
+    return map;
+  }, [markets]);
+
+  // Title-based fallback: precompute token sets for each market
+  const marketTokens = useMemo(() => {
+    if (!markets) return [] as Array<{ id: string; tokens: Set<string> }>;
+    return markets.map((m) => ({ id: m.id, tokens: tokenize(m.name) }));
+  }, [markets]);
+
   const events = useMemo<FeedEvent[]>(() => {
+    const findMarketByTitle = (title: string): string | undefined => {
+      const qTokens = tokenize(title);
+      let bestId: string | undefined;
+      let bestScore = 0.15;
+      for (const { id, tokens } of marketTokens) {
+        const score = jaccard(qTokens, tokens);
+        if (score > bestScore) { bestScore = score; bestId = id; }
+      }
+      return bestId;
+    };
     const all: FeedEvent[] = [];
     const now = Date.now();
 
-    // Whale events (link to /whales since ActivityEvent has no marketId)
+    // Whale events — resolve to market page via conditionId lookup or title match
     if (whaleData?.activity) {
       for (const a of whaleData.activity) {
+        const mId =
+          (a.conditionId ? conditionToMarketId.get(a.conditionId) : undefined)
+          ?? findMarketByTitle(a.title);
+        if (!mId) continue; // skip if no market link can be resolved
         const isBuy = a.side === "BUY";
         all.push({
           id: `whale-${a.id}`,
           type: isBuy ? "whale_buy" : "whale_sell",
           title: `Whale ${isBuy ? "bought" : "sold"} ${formatDollar(a.amount)} ${a.outcome}`,
           subtitle: truncate(a.title),
-          href: "/whales",
+          marketId: mId,
           timestamp: new Date(a.timestamp).getTime(),
         });
       }
     }
 
-    // WebSocket real-time price spikes (>3% session move)
     if (markets) {
       const marketMap = new Map(markets.map((m) => [m.id, m]));
+
+      // WebSocket real-time price spikes (>3% session move)
       for (const [id, update] of wsUpdates.entries()) {
         if (Math.abs(update.priceChange) > 3) {
           const market = marketMap.get(id);
           if (!market) continue;
           const isUp = update.priceChange > 0;
           all.push({
-            id: `ws-${id}-${update.timestamp}`,
+            id: `ws-${id}-${Math.floor(update.timestamp / 60_000)}`,
             type: isUp ? "price_up" : "price_down",
             title: `${isUp ? "▲" : "▼"} ${isUp ? "+" : ""}${update.priceChange.toFixed(1)}% live move`,
             subtitle: truncate(market.name),
@@ -92,29 +135,26 @@ export function useLiveFeed(limit = 20): {
           });
         }
       }
-    }
 
-    // 24h price movers (>3%) from market snapshot — use stable index-based offset
-    if (markets) {
+      // 24h price movers (>3%) — stable deterministic timestamps
+      const wsCoveredIds = new Set(
+        [...wsUpdates.entries()]
+          .filter(([, u]) => Math.abs(u.priceChange) > 3)
+          .map(([id]) => id)
+      );
       markets.forEach((m, i) => {
+        if (wsCoveredIds.has(m.id)) return;
         const change = m.change24h;
         if (Math.abs(change) > 3) {
           const isUp = change > 0;
-          // Stable timestamp: spread events 2 min apart so sort order is deterministic
-          const ts = now - (i + 1) * 120_000;
-          // Skip if WebSocket already covered this market with a live spike
-          const wsKey = `ws-${m.id}`;
-          const alreadyCovered = all.some((e) => e.id.startsWith(wsKey));
-          if (!alreadyCovered) {
-            all.push({
-              id: `price-${m.id}`,
-              type: isUp ? "price_up" : "price_down",
-              title: `${isUp ? "▲" : "▼"} ${isUp ? "+" : ""}${change}% in 24h`,
-              subtitle: truncate(m.name),
-              marketId: m.id,
-              timestamp: ts,
-            });
-          }
+          all.push({
+            id: `price-${m.id}`,
+            type: isUp ? "price_up" : "price_down",
+            title: `${isUp ? "▲" : "▼"} ${isUp ? "+" : ""}${change}% in 24h`,
+            subtitle: truncate(m.name),
+            marketId: m.id,
+            timestamp: now - (i + 1) * 120_000,
+          });
         }
       });
 
@@ -137,24 +177,24 @@ export function useLiveFeed(limit = 20): {
       });
     }
 
-    // Arbitrage opportunities (top 3 by profit)
+    // Arbitrage events — link to the matched Polymarket market page
     if (arbData?.opportunities) {
-      const active = arbData.opportunities
-        .filter((o) => o.status === "active")
-        .slice(0, 3);
-      active.forEach((opp, i) => {
-        all.push({
-          id: `arb-${opp.id}`,
-          type: "arb",
-          title: `${opp.profit.toFixed(1)}% arb: ${opp.platform2} vs ${opp.platform1}`,
-          subtitle: truncate(opp.market),
-          href: "/arbitrage",
-          timestamp: now - i * 180_000,
+      arbData.opportunities
+        .filter((o) => o.status === "active" && o.polyMarketId)
+        .slice(0, 3)
+        .forEach((opp, i) => {
+          all.push({
+            id: `arb-${opp.id}`,
+            type: "arb",
+            title: `${opp.profit.toFixed(1)}% arb: ${opp.platform2} vs ${opp.platform1}`,
+            subtitle: truncate(opp.market),
+            marketId: opp.polyMarketId!,
+            timestamp: now - i * 180_000,
+          });
         });
-      });
     }
 
-    // Sort newest first and deduplicate by id
+    // Sort newest first; deduplicate by id
     const seen = new Set<string>();
     return all
       .filter((e) => {
@@ -164,7 +204,8 @@ export function useLiveFeed(limit = 20): {
       })
       .sort((a, b) => b.timestamp - a.timestamp)
       .slice(0, limit);
-  }, [whaleData, markets, arbData, wsUpdates, limit]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [whaleData, markets, arbData, wsUpdates, conditionToMarketId, marketTokens, limit]);
 
   return {
     events,

@@ -27,6 +27,7 @@ export interface WhalesLeaderboard {
 export interface ActivityEvent {
   id: string;
   proxyWallet: string;
+  conditionId?: string;
   title: string;
   side: "BUY" | "SELL";
   outcome: "YES" | "NO";

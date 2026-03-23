@@ -50,6 +50,7 @@ async function fetchWalletActivity(
 type ActivityItem = {
   id: string;
   proxyWallet: string;
+  conditionId?: string;
   title: string;
   side: string;
   outcome: string;
@@ -72,6 +73,7 @@ export async function GET(request: Request) {
       .map((a) => ({
         id: String(a.id ?? `${Date.now()}-${Math.random()}`),
         proxyWallet: address,
+        conditionId: a.conditionId ? String(a.conditionId) : undefined,
         title: String(a.title ?? a.question ?? ""),
         side: String(a.side ?? "BUY"),
         outcome: String(a.outcome ?? "YES"),
@@ -96,6 +98,7 @@ export async function GET(request: Request) {
         .map((a): ActivityItem => ({
           id: String(a.id ?? `${addr}-${Date.now()}-${Math.random()}`),
           proxyWallet: addr,
+          conditionId: a.conditionId ? String(a.conditionId) : undefined,
           title: String(a.title ?? a.question ?? ""),
           side: String(a.side ?? "BUY"),
           outcome: String(a.outcome ?? "YES"),

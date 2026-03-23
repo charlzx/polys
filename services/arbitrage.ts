@@ -7,6 +7,7 @@ import type { TransformedMarket } from "./polymarket";
 export interface ArbitrageOpportunity {
   id: number;
   market: string;
+  polyMarketId?: string; // Polymarket market ID for direct link
   platform1: string; // higher YES price (overpriced side — buy NO here)
   platform2: string; // lower YES price (underpriced side — buy YES here)
   odds1: number; // YES price on platform1 as percentage
@@ -204,6 +205,7 @@ export function detectArbitrage(
     opportunities.push({
       id: opportunities.length + 1,
       market: kalshi.eventTitle,
+      polyMarketId: bestPoly.id,
       platform1,
       platform2,
       odds1,
