@@ -223,7 +223,7 @@ const SwipeableMarketCard = ({
 };
 
 export default function DashboardPage() {
-  const { data: markets, isLoading, error, refetch } = useMarkets({ limit: 5, active: true });
+  const { data: markets, isLoading, error, refetch } = useMarkets({ limit: 20, active: true });
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
 
   const tokenPairs = useMemo(

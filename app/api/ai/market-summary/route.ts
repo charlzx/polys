@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { fetchMarketById } from "@/services/polymarket";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -16,29 +17,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "AI features require a GEMINI_API_KEY" }, { status: 503 });
   }
 
-  // Fetch market data from our own API
-  const baseUrl = req.nextUrl.origin;
-  let market: {
-    id: string;
-    name: string;
-    description?: string;
-    category: string;
-    yesOdds: number;
-    noOdds: number;
-    change24h: number;
-    volume: string;
-    liquidity: string;
-    endDate: string;
-  } | null = null;
-
-  try {
-    const res = await fetch(`${baseUrl}/api/markets/${marketId}`);
-    if (res.ok) {
-      market = await res.json();
-    }
-  } catch {
-    // ignore
-  }
+  // Fetch and transform market data using the polymarket service
+  const market = await fetchMarketById(marketId);
 
   if (!market) {
     return NextResponse.json({ error: "Market not found" }, { status: 404 });
@@ -89,7 +69,15 @@ Return ONLY valid JSON, no markdown, no explanation.`;
     // Strip markdown code fences if present
     const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
     const parsed = JSON.parse(cleaned);
-    return NextResponse.json(parsed);
+
+    // Validate shape and provide defaults for any missing fields
+    return NextResponse.json({
+      sentiment: typeof parsed.sentiment === "string" ? parsed.sentiment : "Neutral",
+      riskFactors: Array.isArray(parsed.riskFactors) ? parsed.riskFactors : [],
+      priceMovementInsight: typeof parsed.priceMovementInsight === "string" ? parsed.priceMovementInsight : "",
+      probabilityAssessment: typeof parsed.probabilityAssessment === "string" ? parsed.probabilityAssessment : "",
+      oneLiner: typeof parsed.oneLiner === "string" ? parsed.oneLiner : "",
+    });
   } catch (err) {
     console.error("Gemini market-summary parse error:", err);
     return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });

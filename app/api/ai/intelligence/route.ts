@@ -57,8 +57,24 @@ Return ONLY valid JSON array, no markdown, no explanation.`;
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
     const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    const parsed = JSON.parse(cleaned);
-    return NextResponse.json(parsed);
+    const parsed: unknown[] = JSON.parse(cleaned);
+    // Validate and normalize each item
+    const validated = (Array.isArray(parsed) ? parsed : []).map((item) => {
+      const i = item as Record<string, unknown>;
+      return {
+        marketId: typeof i.marketId === "string" ? i.marketId : "",
+        marketName: typeof i.marketName === "string" ? i.marketName : "",
+        category: typeof i.category === "string" ? i.category : "",
+        insight: typeof i.insight === "string" ? i.insight : "",
+        signal: (["bullish", "bearish", "neutral"] as const).includes(i.signal as "bullish" | "bearish" | "neutral")
+          ? (i.signal as "bullish" | "bearish" | "neutral")
+          : "neutral",
+        magnitude: (["high", "medium", "low"] as const).includes(i.magnitude as "high" | "medium" | "low")
+          ? (i.magnitude as "high" | "medium" | "low")
+          : "medium",
+      };
+    }).filter((i) => i.marketId && i.marketName);
+    return NextResponse.json(validated);
   } catch (err) {
     console.error("Gemini intelligence parse error:", err);
     return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
