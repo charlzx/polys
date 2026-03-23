@@ -126,7 +126,7 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
   - `TickerItem` defined as module-level function to avoid React invalid-hook-call error
   - Pulse loading skeleton while markets are loading
   - Each ticker item links to the market detail page
-- **Cleanup**: `data/predictions.ts` emptied (`export {}` stub)
+- **Cleanup**: `data/predictions.ts` deleted entirely (no remaining importers)
 
 ## Running the App
 - **Dev**: `pnpm run dev` (runs on port 5000)
