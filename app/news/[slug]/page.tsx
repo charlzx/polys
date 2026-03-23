@@ -200,12 +200,12 @@ export default function NewsDetailPage({ params }: { params: Promise<{ slug: str
                 </Badge>
               ))}
             </div>
-            <h1 className="text-title md:text-display font-bold leading-tight mb-4">
+            <h1 className="text-title md:text-display font-bold leading-tight mb-3">
               {market.question}
             </h1>
-            {market.description && (
-              <p className="text-body text-muted-foreground leading-relaxed">
-                {market.description}
+            {market.endDate && (
+              <p className="text-small text-muted-foreground">
+                Market closes {market.endDate}
               </p>
             )}
           </div>
@@ -359,7 +359,7 @@ export default function NewsDetailPage({ params }: { params: Promise<{ slug: str
                   </div>
                   {market.endDate && (
                     <div className="flex items-center justify-between text-small">
-                      <span className="text-muted-foreground">End Date</span>
+                      <span className="text-muted-foreground">Closes</span>
                       <span className="font-medium">{market.endDate}</span>
                     </div>
                   )}
@@ -369,6 +369,20 @@ export default function NewsDetailPage({ params }: { params: Promise<{ slug: str
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Resolution criteria */}
+              {market.description && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-small font-semibold">Resolution Criteria</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-small text-muted-foreground leading-relaxed">
+                      {market.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* AI Insights */}
               <Card>
