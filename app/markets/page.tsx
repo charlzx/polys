@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
@@ -245,6 +246,7 @@ function MarketSkeleton() {
 
 export default function MarketsPage() {
   const { isAuthenticated } = useAuth();
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("All");
   const [selectedSource, setSelectedSource] = useState<"all" | MarketSource>("all");
@@ -253,6 +255,13 @@ export default function MarketsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const source = searchParams.get("source");
+    if (source === "kalshi" || source === "polymarket") {
+      setSelectedSource(source as MarketSource);
+    }
+  }, [searchParams]);
 
   const { watchlistIds, toggleWatchlist, isWatched } = useWatchlist();
 

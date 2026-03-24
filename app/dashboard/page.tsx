@@ -23,6 +23,15 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarkets } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
+import { useUnifiedMarkets } from "@/hooks/useUnifiedMarkets";
+import { polymarketToUnified } from "@/services/unified";
+import type { UnifiedMarket } from "@/services/unified";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { WhaleActivityFeed } from "@/components/WhaleActivityFeed";
 import { LiveFeed } from "@/components/LiveFeed";
 import { useMarketIntelligence } from "@/services/ai";
@@ -30,6 +39,45 @@ import { Sparkle } from "@phosphor-icons/react";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useArbitrage } from "@/hooks/useArbitrage";
+
+function DashboardKalshiDialog({ market, open, onClose }: { market: UnifiedMarket; open: boolean; onClose: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base leading-snug">{market.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-caption">{market.category}</Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-500/40 text-blue-500">Kalshi</Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="text-center p-3 rounded-lg bg-success/10">
+              <div className="text-caption text-muted-foreground mb-1">YES</div>
+              <div className="text-title font-bold text-success">{market.yesOdds}%</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-destructive/10">
+              <div className="text-caption text-muted-foreground mb-1">NO</div>
+              <div className="text-title font-bold text-destructive">{market.noOdds}%</div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+            <span>Volume</span>
+            <span className="font-medium">{market.volume}</span>
+          </div>
+          {market.externalUrl && (
+            <Button variant="secondary" size="sm" className="w-full" asChild>
+              <a href={market.externalUrl} target="_blank" rel="noopener noreferrer">
+                View on Kalshi
+              </a>
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -108,15 +156,7 @@ const CollapsibleCard = ({
 };
 
 interface MarketCardProps {
-  market: {
-    id: string;
-    name: string;
-    category: string;
-    yesOdds: number;
-    noOdds: number;
-    volume: string;
-    change24h: number;
-  };
+  market: UnifiedMarket;
   onSwipeRight: () => void;
   onSwipeLeft: () => void;
 }
@@ -127,6 +167,7 @@ const SwipeableMarketCard = ({
   onSwipeLeft,
 }: MarketCardProps) => {
   const x = useMotionValue(0);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const background = useTransform(
     x,
     [-100, 0, 100],
@@ -134,6 +175,7 @@ const SwipeableMarketCard = ({
   );
   const rightOpacity = useTransform(x, [0, 100], [0, 1]);
   const leftOpacity = useTransform(x, [-100, 0], [1, 0]);
+  const isKalshi = market.source === "kalshi";
 
   const handleDragEnd = (
     _event: MouseEvent | TouchEvent | PointerEvent,
@@ -148,88 +190,117 @@ const SwipeableMarketCard = ({
     }
   };
 
+  const cardInner = (
+    <Card className="hover:bg-secondary/50 transition-base cursor-pointer border-0 shadow-none">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-body font-medium leading-tight line-clamp-2 mb-2">
+              {market.name}
+            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="secondary" className="text-caption">
+                {market.category}
+              </Badge>
+              {isKalshi ? (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-500/40 text-blue-500">
+                  Kalshi
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-500/40 text-purple-500">
+                  Polymarket
+                </Badge>
+              )}
+            </div>
+          </div>
+          {market.change24h !== 0 && (
+            <div
+              className={`text-small font-medium shrink-0 flex items-center gap-0.5 ${
+                market.change24h >= 0 ? "text-success" : "text-destructive"
+              }`}
+            >
+              {market.change24h >= 0 ? (
+                <TrendUpIcon className="h-3 w-3" />
+              ) : (
+                <TrendDownIcon className="h-3 w-3" />
+              )}
+              {market.change24h >= 0 ? "+" : ""}
+              {market.change24h}%
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 mt-3">
+          <div className="flex-1 text-center p-2 rounded bg-success/10">
+            <div className="text-small text-muted-foreground mb-0.5">YES</div>
+            <div className="text-body font-bold text-success">{market.yesOdds}¢</div>
+          </div>
+          <div className="flex-1 text-center p-2 rounded bg-destructive/10">
+            <div className="text-small text-muted-foreground mb-0.5">NO</div>
+            <div className="text-body font-bold text-destructive">{market.noOdds}¢</div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between mt-3 text-small text-muted-foreground">
+          <span>Volume</span>
+          <span className="font-medium">{market.volume}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <div className="relative">
-      <motion.div
-        className="absolute inset-0 rounded-lg overflow-hidden"
-        style={{ background }}
-      >
+    <>
+      <div className="relative">
         <motion.div
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-white font-medium text-small"
-          style={{ opacity: leftOpacity }}
+          className="absolute inset-0 rounded-lg overflow-hidden"
+          style={{ background }}
         >
-          Dismiss
+          <motion.div
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-white font-medium text-small"
+            style={{ opacity: leftOpacity }}
+          >
+            Dismiss
+          </motion.div>
+          <motion.div
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-white font-medium text-small"
+            style={{ opacity: rightOpacity }}
+          >
+            Add to Watchlist
+          </motion.div>
         </motion.div>
+
         <motion.div
-          className="absolute right-4 top-1/2 -translate-y-1/2 text-white font-medium text-small"
-          style={{ opacity: rightOpacity }}
+          drag="x"
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.7}
+          onDragEnd={handleDragEnd}
+          style={{ x }}
+          className="relative bg-card"
         >
-          Add to Watchlist
+          {isKalshi ? (
+            <div onClick={() => setDialogOpen(true)}>{cardInner}</div>
+          ) : (
+            <Link href={`/markets/${market.id}`}>{cardInner}</Link>
+          )}
         </motion.div>
-      </motion.div>
-
-      <motion.div
-        drag="x"
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.7}
-        onDragEnd={handleDragEnd}
-        style={{ x }}
-        className="relative bg-card"
-      >
-        <Link href={`/markets/${market.id}`}>
-          <Card className="hover:bg-secondary/50 transition-base cursor-pointer border-0 shadow-none">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-body font-medium leading-tight line-clamp-2 mb-2">
-                    {market.name}
-                  </p>
-                  <Badge variant="secondary" className="text-caption">
-                    {market.category}
-                  </Badge>
-                </div>
-                <div
-                  className={`text-small font-medium shrink-0 flex items-center gap-0.5 ${
-                    market.change24h >= 0 ? "text-success" : "text-destructive"
-                  }`}
-                >
-                  {market.change24h >= 0 ? (
-                    <TrendUpIcon className="h-3 w-3" />
-                  ) : (
-                    <TrendDownIcon className="h-3 w-3" />
-                  )}
-                  {market.change24h >= 0 ? "+" : ""}
-                  {market.change24h}%
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 mt-3">
-                <div className="flex-1 text-center p-2 rounded bg-success/10">
-                  <div className="text-small text-muted-foreground mb-0.5">YES</div>
-                  <div className="text-body font-bold text-success">{market.yesOdds}¢</div>
-                </div>
-                <div className="flex-1 text-center p-2 rounded bg-destructive/10">
-                  <div className="text-small text-muted-foreground mb-0.5">NO</div>
-                  <div className="text-body font-bold text-destructive">{market.noOdds}¢</div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-3 text-small text-muted-foreground">
-                <span>24h Volume</span>
-                <span className="font-medium">{market.volume}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </motion.div>
-    </div>
+      </div>
+      {isKalshi && (
+        <DashboardKalshiDialog market={market} open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      )}
+    </>
   );
 };
 
 export default function DashboardPage() {
-  const { data: markets, isLoading, error, refetch } = useMarkets({ limit: 20, active: true });
+  const { data: markets, isLoading: polyLoading, error: polyError, refetch: polyRefetch } = useMarkets({ limit: 20, active: true });
+  const { data: unifiedMarkets, isLoading: unifiedLoading, error: unifiedError, refetch: unifiedRefetch } = useUnifiedMarkets({ limit: 100 });
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
   const { user } = useAuth();
+
+  const isLoading = polyLoading || unifiedLoading;
+  const error = polyError && unifiedError;
+  const refetch = () => { polyRefetch(); unifiedRefetch(); };
 
   const { stats, isLoading: statsLoading } = useDashboardStats(user?.id);
   const { alerts: userAlerts, isLoading: alertsLoading } = useAlerts(user?.id);
@@ -259,13 +330,23 @@ export default function DashboardPage() {
     marketIds: markets?.map((m) => m.id) ?? [],
   });
 
-  const liveMarkets = useMemo(
+  const livePolyUnified = useMemo(
+    () => (markets ? applyUpdatesToMarkets(markets).map(polymarketToUnified) : []),
+    [markets, applyUpdatesToMarkets]
+  );
+
+  const liveMarkets = useMemo<UnifiedMarket[]>(() => {
+    const livePolyMap = new Map(livePolyUnified.map((m) => [m.id, m]));
+    return (unifiedMarkets ?? []).map((m) => livePolyMap.get(m.id) ?? m);
+  }, [unifiedMarkets, livePolyUnified]);
+
+  const livePolyMarketsForIntelligence = useMemo(
     () => (markets ? applyUpdatesToMarkets(markets) : []),
     [markets, applyUpdatesToMarkets]
   );
 
   const { data: intelligence, isLoading: intelligenceLoading } = useMarketIntelligence(
-    liveMarkets.slice(0, 10)
+    livePolyMarketsForIntelligence.slice(0, 10)
   );
 
   if (!shouldShowContent) {
@@ -406,15 +487,7 @@ export default function DashboardPage() {
                     liveMarkets.map((market) => (
                       <div key={market.id} className="min-w-0">
                         <SwipeableMarketCard
-                          market={{
-                            id: market.id,
-                            name: market.name,
-                            category: market.category,
-                            yesOdds: market.yesOdds,
-                            noOdds: market.noOdds,
-                            volume: market.volume24h || market.volume,
-                            change24h: market.change24h,
-                          }}
+                          market={market}
                           onSwipeRight={() => console.log("Watchlist:", market.id)}
                           onSwipeLeft={() => console.log("Dismissed:", market.id)}
                         />

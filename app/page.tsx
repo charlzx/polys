@@ -11,6 +11,9 @@ import { Footer } from "@/components/Footer";
 import { useMarkets } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import type { TransformedMarket } from "@/services/polymarket";
+import { useUnifiedMarkets } from "@/hooks/useUnifiedMarkets";
+import { polymarketToUnified } from "@/services/unified";
+import type { UnifiedMarket } from "@/services/unified";
 import { features } from "@/data/features";
 import { categories } from "@/data/categories";
 import { LiveFeed } from "@/components/LiveFeed";
@@ -30,11 +33,27 @@ import {
 import { useState, useMemo, useRef } from "react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 
+function SourceBadgeTiny({ source }: { source: UnifiedMarket["source"] }) {
+  if (source === "kalshi") {
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-500/40 text-blue-500">
+        Kalshi
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-500/40 text-purple-500">
+      Polymarket
+    </Badge>
+  );
+}
+
 // Single ticker item — defined outside component to avoid hook-violation during render
-function TickerItem({ market }: { market: TransformedMarket }) {
+function TickerItem({ market }: { market: UnifiedMarket }) {
+  const href = market.source === "kalshi" ? `/markets?source=kalshi` : `/markets/${market.id}`;
   return (
     <Link
-      href={`/markets/${market.id}`}
+      href={href}
       className="flex items-center gap-2 px-6 py-3 whitespace-nowrap border-r border-border/50 hover:bg-secondary/50 transition-colors"
     >
       <span className="text-small text-foreground font-medium line-clamp-1 max-w-[200px]">
@@ -60,7 +79,7 @@ function TickerItem({ market }: { market: TransformedMarket }) {
 }
 
 // Infinite scrolling live markets ticker
-function PredictionsTicker({ markets }: { markets: TransformedMarket[] }) {
+function PredictionsTicker({ markets }: { markets: UnifiedMarket[] }) {
   const items = markets.slice(0, 10);
   if (items.length === 0) {
     return (
@@ -78,10 +97,12 @@ function PredictionsTicker({ markets }: { markets: TransformedMarket[] }) {
   );
 }
 
-// Featured market component with animation and inner-glow hover effect
-function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; isLive?: boolean; index: number }) {
+// Featured market component with animation
+function FeaturedMarket({ market, isLive, index }: { market: UnifiedMarket; isLive?: boolean; index: number }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-50px" });
+  const isKalshi = market.source === "kalshi";
+  const href = isKalshi ? `/markets?source=kalshi` : `/markets/${market.id}`;
 
   return (
     <motion.div
@@ -91,10 +112,9 @@ function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; 
       transition={{ duration: 0.5, delay: index * 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
     >
       <Link
-        href={`/markets/${market.id}`}
+        href={href}
         className="block rounded-xl bg-card border border-border hover:border-primary/40 transition-all group overflow-hidden min-h-[44px]"
       >
-        {/* Event image */}
         <div className="relative w-full h-28 bg-secondary/50">
           {market.image ? (
             <Image
@@ -113,11 +133,12 @@ function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; 
         <div className="p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <Badge variant="outline" className="text-caption">
                   {market.category}
                 </Badge>
-                {isLive && (
+                <SourceBadgeTiny source={market.source} />
+                {isLive && market.source === "polymarket" && (
                   <span className="flex items-center gap-1 text-caption text-success">
                     <Broadcast weight="fill" className="h-2.5 w-2.5 animate-pulse" />
                     Live
@@ -129,19 +150,21 @@ function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; 
               </h3>
               <div className="flex items-center gap-3 text-caption text-muted-foreground">
                 <span>{market.volume} Vol</span>
-                <span
-                  className={`flex items-center gap-0.5 ${
-                    market.change24h >= 0 ? "text-success" : "text-destructive"
-                  }`}
-                >
-                  {market.change24h >= 0 ? (
-                    <TrendUpIcon weight="bold" className="h-3 w-3" />
-                  ) : (
-                    <TrendDownIcon weight="bold" className="h-3 w-3" />
-                  )}
-                  {market.change24h >= 0 ? "+" : ""}
-                  {market.change24h}%
-                </span>
+                {market.change24h !== 0 && (
+                  <span
+                    className={`flex items-center gap-0.5 ${
+                      market.change24h >= 0 ? "text-success" : "text-destructive"
+                    }`}
+                  >
+                    {market.change24h >= 0 ? (
+                      <TrendUpIcon weight="bold" className="h-3 w-3" />
+                    ) : (
+                      <TrendDownIcon weight="bold" className="h-3 w-3" />
+                    )}
+                    {market.change24h >= 0 ? "+" : ""}
+                    {market.change24h}%
+                  </span>
+                )}
               </div>
             </div>
             <div className="text-right shrink-0">
@@ -158,16 +181,17 @@ function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; 
 }
 
 // Mobile-friendly market row
-function MarketRow({ market, rank }: { market: TransformedMarket; rank: number }) {
+function MarketRow({ market, rank }: { market: UnifiedMarket; rank: number }) {
+  const isKalshi = market.source === "kalshi";
+  const href = isKalshi ? `/markets?source=kalshi` : `/markets/${market.id}`;
   return (
     <Link
-      href={`/markets/${market.id}`}
+      href={href}
       className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors group min-h-[44px]"
     >
       <span className="text-caption text-muted-foreground w-5 text-center font-mono shrink-0">
         {rank}
       </span>
-      {/* Small market image */}
       <div className="relative w-8 h-8 rounded-md overflow-hidden bg-secondary/70 shrink-0 hidden sm:block">
         {market.image ? (
           <Image
@@ -184,18 +208,21 @@ function MarketRow({ market, rank }: { market: TransformedMarket; rank: number }
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
+        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
           <Badge variant="outline" className="text-caption shrink-0 px-1.5 py-0">
             {market.category}
           </Badge>
-          <span
-            className={`text-caption font-medium shrink-0 ${
-              market.change24h >= 0 ? "text-success" : "text-destructive"
-            }`}
-          >
-            {market.change24h >= 0 ? "+" : ""}
-            {market.change24h}%
-          </span>
+          <SourceBadgeTiny source={market.source} />
+          {market.change24h !== 0 && (
+            <span
+              className={`text-caption font-medium shrink-0 ${
+                market.change24h >= 0 ? "text-success" : "text-destructive"
+              }`}
+            >
+              {market.change24h >= 0 ? "+" : ""}
+              {market.change24h}%
+            </span>
+          )}
         </div>
         <span className="text-small font-medium line-clamp-1 group-hover:text-primary transition-colors">
           {market.name}
@@ -265,26 +292,33 @@ export default function LandingPage() {
   const heroRef = useRef<HTMLDivElement>(null);
   const heroInView = useInView(heroRef, { once: true });
 
-  const { data: markets, isLoading } = useMarkets({ limit: 20, active: true });
+  const { data: unifiedMarkets, isLoading } = useUnifiedMarkets({ limit: 100 });
+
+  const { data: polyMarkets } = useMarkets({ limit: 20, active: true });
 
   const tokenPairs = useMemo(
     () =>
-      (markets ?? [])
+      (polyMarkets ?? [])
         .filter((m) => m.yesTokenId)
         .map((m) => ({ marketId: m.id, yesTokenId: m.yesTokenId! })),
-    [markets]
+    [polyMarkets]
   );
 
   const { isConnected, applyUpdatesToMarkets } = useMarketWebSocket({
     tokenPairs,
-    marketIds: markets?.map((m) => m.id) ?? [],
-    enabled: (markets?.length ?? 0) > 0,
+    marketIds: polyMarkets?.map((m) => m.id) ?? [],
+    enabled: (polyMarkets?.length ?? 0) > 0,
   });
 
-  const liveMarkets = useMemo(() => {
-    if (!markets) return [];
-    return applyUpdatesToMarkets(markets);
-  }, [markets, applyUpdatesToMarkets]);
+  const livePolyUnified = useMemo(() => {
+    if (!polyMarkets) return [];
+    return applyUpdatesToMarkets(polyMarkets).map(polymarketToUnified);
+  }, [polyMarkets, applyUpdatesToMarkets]);
+
+  const liveMarkets = useMemo<UnifiedMarket[]>(() => {
+    const livePolyMap = new Map(livePolyUnified.map((m) => [m.id, m]));
+    return (unifiedMarkets ?? []).map((m) => livePolyMap.get(m.id) ?? m);
+  }, [unifiedMarkets, livePolyUnified]);
 
   const filteredMarkets = useMemo(() => {
     let result = liveMarkets;
