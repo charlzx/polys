@@ -157,8 +157,11 @@ Return ONLY valid JSON, no markdown, no explanation.`;
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    // Strip markdown code fences, then extract the first JSON object
+    const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+    const match = stripped.match(/(\{[\s\S]*\})/);
+    const jsonStr = match ? match[1] : stripped;
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
 
     return NextResponse.json({
       sentiment: typeof parsed.sentiment === "string" ? parsed.sentiment : "Neutral",
@@ -169,6 +172,12 @@ Return ONLY valid JSON, no markdown, no explanation.`;
     });
   } catch (err) {
     console.error("Gemini market-summary parse error:", err);
-    return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
+    return NextResponse.json({
+      sentiment: "Neutral",
+      riskFactors: [],
+      priceMovementInsight: "",
+      probabilityAssessment: "",
+      oneLiner: "",
+    });
   }
 }

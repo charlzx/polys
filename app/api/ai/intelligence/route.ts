@@ -60,8 +60,11 @@ Return ONLY valid JSON array, no markdown, no explanation.`;
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    const parsed: unknown[] = JSON.parse(cleaned);
+    // Strip markdown code fences, then extract the first JSON array
+    const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+    const match = stripped.match(/(\[[\s\S]*\])/);
+    const jsonStr = match ? match[1] : stripped;
+    const parsed: unknown[] = JSON.parse(jsonStr);
     // Validate and normalize each item
     const validated = (Array.isArray(parsed) ? parsed : []).map((item) => {
       const i = item as Record<string, unknown>;
@@ -81,6 +84,6 @@ Return ONLY valid JSON array, no markdown, no explanation.`;
     return NextResponse.json(validated);
   } catch (err) {
     console.error("Gemini intelligence parse error:", err);
-    return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
+    return NextResponse.json([]);
   }
 }

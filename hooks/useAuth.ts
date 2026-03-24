@@ -12,11 +12,15 @@ export interface User {
   tier: "free" | "pro" | "premium";
 }
 
-interface Profile {
+export interface Profile {
   id: string;
   name: string | null;
   tier: "free" | "pro" | "premium";
   avatar_url: string | null;
+  timezone: string | null;
+  email_alerts_enabled: boolean | null;
+  portfolio_daily_digest: boolean | null;
+  weekly_summary: boolean | null;
 }
 
 // Fetch profile row; returns null if table doesn't exist yet or row not found
@@ -26,7 +30,7 @@ async function fetchProfile(
 ): Promise<Profile | null> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, name, tier, avatar_url")
+    .select("id, name, tier, avatar_url, timezone, email_alerts_enabled, portfolio_daily_digest, weekly_summary")
     .eq("id", userId)
     .single();
 
