@@ -154,7 +154,7 @@ export function AlertEmail({
 export default AlertEmail;
 
 const body: React.CSSProperties = {
-  backgroundColor: "#0f0f13",
+  backgroundColor: "#f9fafb",
   fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   margin: 0,
   padding: 0,
@@ -173,7 +173,7 @@ const headerSection: React.CSSProperties = {
 const logoText: React.CSSProperties = {
   fontSize: "22px",
   fontWeight: "700",
-  color: "#ffffff",
+  color: "#111827",
   letterSpacing: "-0.5px",
   margin: "0",
   display: "inline",
@@ -187,9 +187,9 @@ const subheadText: React.CSSProperties = {
 };
 
 const card: React.CSSProperties = {
-  backgroundColor: "#18181b",
+  backgroundColor: "#ffffff",
   borderRadius: "12px",
-  border: "1px solid #27272a",
+  border: "1px solid #e5e7eb",
   overflow: "hidden",
 };
 
@@ -222,19 +222,19 @@ const badge: React.CSSProperties = {
 const alertTitle: React.CSSProperties = {
   fontSize: "20px",
   fontWeight: "700",
-  color: "#ffffff",
+  color: "#111827",
   lineHeight: "1.3",
   margin: "0 0 4px 0",
 };
 
 const marketNameText: React.CSSProperties = {
   fontSize: "14px",
-  color: "#9ca3af",
+  color: "#6b7280",
   margin: "0 0 20px 0",
 };
 
 const conditionBox: React.CSSProperties = {
-  backgroundColor: "#0f0f13",
+  backgroundColor: "#f3f4f6",
   borderRadius: "8px",
   padding: "16px",
   marginBottom: "20px",
@@ -251,12 +251,12 @@ const conditionLabel: React.CSSProperties = {
 
 const conditionValue: React.CSSProperties = {
   fontSize: "15px",
-  color: "#e5e7eb",
+  color: "#374151",
   margin: "0",
 };
 
 const metricBox: React.CSSProperties = {
-  backgroundColor: "#0f0f13",
+  backgroundColor: "#f3f4f6",
   borderRadius: "8px",
   padding: "14px",
   textAlign: "center",
@@ -274,7 +274,7 @@ const metricLabel: React.CSSProperties = {
 const metricValue: React.CSSProperties = {
   fontSize: "20px",
   fontWeight: "700",
-  color: "#ffffff",
+  color: "#111827",
   margin: "0",
 };
 
@@ -292,16 +292,16 @@ const button: React.CSSProperties = {
 };
 
 const hr: React.CSSProperties = {
-  borderColor: "#27272a",
+  borderColor: "#e5e7eb",
   margin: "24px 0",
 };
 
 const footer: React.CSSProperties = {
   fontSize: "12px",
-  color: "#4b5563",
+  color: "#6b7280",
   textAlign: "center",
 };
 
 const footerLink: React.CSSProperties = {
-  color: "#6b7280",
+  color: "#4b5563",
 };
