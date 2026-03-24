@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useEffect, useRef, useState } from "react";
-import type { TransformedMarket } from "@/services/polymarket";
 import {
   Tooltip,
   TooltipContent,
@@ -9,8 +8,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+interface PulseMarket {
+  id: string;
+  name: string;
+  yesOdds: number;
+  change24h: number;
+  volume?: string;
+  volume24h?: string | number;
+  volumeRaw?: number;
+}
+
 interface MarketPulseGridProps {
-  markets: TransformedMarket[];
+  markets: PulseMarket[];
 }
 
 function getTileColor(change24h: number, yesOdds: number): string {
@@ -31,7 +40,8 @@ function parseDollarString(s: string): number {
   return num;
 }
 
-function rawVolume(market: TransformedMarket): number {
+function rawVolume(market: PulseMarket): number {
+  if (typeof market.volumeRaw === "number") return market.volumeRaw;
   if (typeof market.volume24h === "number") return market.volume24h;
   if (typeof market.volume24h === "string" && market.volume24h) {
     return parseDollarString(market.volume24h);
@@ -42,7 +52,7 @@ function rawVolume(market: TransformedMarket): number {
   return 0;
 }
 
-function formatVolume(market: TransformedMarket): string {
+function formatVolume(market: PulseMarket): string {
   const num = rawVolume(market);
   if (num === 0) return "N/A";
   if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(1)}M`;

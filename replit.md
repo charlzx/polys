@@ -18,8 +18,10 @@ A Next.js application for tracking odds, detecting arbitrage opportunities, and 
 - `app/api/price-history/` - Server-side proxy for CLOB price history API
 - `components/` - Shared React components and UI primitives
 - `services/polymarket.ts` - Real Polymarket Gamma API integration (no more mock data)
+- `services/unified.ts` - Unified `UnifiedMarket` type + converters for Polymarket & Kalshi
 - `app/api/orderbook/` - Server-side proxy for CLOB order book API
 - `hooks/useMarketWebSocket.ts` - Real-time market updates via CLOB WebSocket (wss); polling fallback
+- `hooks/useUnifiedMarkets.ts` - Combined hook: fetches Polymarket + Kalshi, merges into `UnifiedMarket[]`
 - `hooks/` - Custom React hooks
 - `lib/` - Utility functions
 - `data/` - Static data files
