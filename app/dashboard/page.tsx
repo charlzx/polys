@@ -290,10 +290,10 @@ export default function DashboardPage() {
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h1 className="text-title md:text-display font-bold">
-                {getGreeting()}, Trader
+                {getGreeting()}, {user?.name?.split(" ")[0] ?? "Trader"}
               </h1>
               <Badge variant="secondary" className="capitalize text-caption w-fit">
-                Free
+                {user?.tier ?? "free"}
               </Badge>
             </div>
             <p className="text-small text-muted-foreground">
@@ -609,20 +609,9 @@ export default function DashboardPage() {
                     <div className="flex flex-col items-center gap-2 py-4 text-center">
                       <Sparkle className="h-6 w-6 text-muted-foreground/50" weight="duotone" />
                       <p className="text-small font-medium">AI Intelligence unavailable</p>
-                      {user?.tier === "free" ? (
-                        <>
-                          <p className="text-caption text-muted-foreground">
-                            Upgrade to Pro to unlock AI-powered market signals and insights.
-                          </p>
-                          <Button variant="outline" size="sm" asChild className="mt-1">
-                            <Link href="/pricing">Upgrade to Pro</Link>
-                          </Button>
-                        </>
-                      ) : (
                         <p className="text-caption text-muted-foreground">
                           Market intelligence is temporarily unavailable. Please try again later.
                         </p>
-                      )}
                     </div>
                   )}
                 </CardContent>

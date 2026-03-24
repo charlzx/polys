@@ -208,7 +208,7 @@ export function useLiveFeed(limit = 20): {
     if (arbData?.opportunities) {
       arbData.opportunities
         .filter((o) => o.status === "active" && o.polyMarketId)
-        .slice(0, 3)
+        .slice(0, 6)
         .forEach((opp, i) => {
           const eid = `arb-${opp.id}`;
           all.push({

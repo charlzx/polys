@@ -21,11 +21,23 @@ function getTileColor(change24h: number, yesOdds: number): string {
   return "bg-muted-foreground/30";
 }
 
+function parseDollarString(s: string): number {
+  const cleaned = s.replace(/[$,\s]/g, "").toUpperCase();
+  const num = parseFloat(cleaned);
+  if (isNaN(num)) return 0;
+  if (cleaned.endsWith("B")) return num * 1_000_000_000;
+  if (cleaned.endsWith("M")) return num * 1_000_000;
+  if (cleaned.endsWith("K")) return num * 1_000;
+  return num;
+}
+
 function rawVolume(market: TransformedMarket): number {
   if (typeof market.volume24h === "number") return market.volume24h;
-  if (typeof market.volume === "string") {
-    const n = parseFloat(market.volume.replace(/[$,]/g, ""));
-    return isNaN(n) ? 0 : n;
+  if (typeof market.volume24h === "string" && market.volume24h) {
+    return parseDollarString(market.volume24h);
+  }
+  if (typeof market.volume === "string" && market.volume) {
+    return parseDollarString(market.volume);
   }
   return 0;
 }

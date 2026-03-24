@@ -433,7 +433,7 @@ export default function LandingPage() {
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.1 }}
           >
-            <LiveFeed limit={6} showHeader={false} compact={false} columns={3} />
+            <LiveFeed limit={9} showHeader={false} compact={false} columns={3} />
           </motion.div>
         </div>
       </section>

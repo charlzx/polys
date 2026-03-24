@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { AppHeader } from "@/components/AppHeader";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -12,8 +11,6 @@ import {
   Clock,
   CaretDown,
   CaretUp,
-  Lock,
-  Sparkle,
   ArrowsCounterClockwise,
 } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,8 +21,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 
 export default function ArbitragePage() {
   const { user } = useAuth();
-  const hasArbitrage = user?.tier === "pro" || user?.tier === "premium";
-  const tier = user?.tier ?? "free";
 
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [minProfit, setMinProfit] = useState([2]);
@@ -84,8 +79,6 @@ export default function ArbitragePage() {
                   Detect cross-platform arbitrage opportunities
                 </p>
               </div>
-              {tier === "premium" && <Badge className="bg-primary">Premium</Badge>}
-              {tier === "pro" && <Badge variant="secondary">Pro</Badge>}
             </div>
             <div className="flex items-center gap-2 text-small text-muted-foreground">
               <ArrowsCounterClockwise
@@ -100,37 +93,6 @@ export default function ArbitragePage() {
             </div>
           </motion.div>
 
-          {/* Premium Gate */}
-          {!hasArbitrage && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-            >
-              <Card className="border-primary/50 bg-primary/5">
-                <CardContent className="p-4 md:p-6 flex flex-col md:flex-row items-center gap-4">
-                  <div className="p-3 rounded-full bg-primary/10">
-                    <Lock weight="duotone" className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="flex-1 text-center md:text-left">
-                    <h3 className="text-subtitle font-semibold mb-1">
-                      Upgrade to Professional
-                    </h3>
-                    <p className="text-small text-muted-foreground">
-                      Real-time arbitrage scanning, cross-platform detection, and instant alerts
-                      when opportunities appear.
-                    </p>
-                  </div>
-                  <Button asChild>
-                    <Link href="/pricing">
-                      <Sparkle weight="fill" className="h-4 w-4 mr-2" />
-                      Upgrade Now
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
 
           <div className="grid gap-4 md:gap-6 lg:grid-cols-4">
             {/* Main Content */}
@@ -155,7 +117,6 @@ export default function ArbitragePage() {
                           max={20}
                           step={1}
                           className="w-full max-w-xs"
-                          disabled={!hasArbitrage}
                         />
                       </div>
                       <div className="flex gap-4">
@@ -169,7 +130,6 @@ export default function ArbitragePage() {
                               onCheckedChange={(checked) =>
                                 setPlatforms((p) => ({ ...p, [key]: !!checked }))
                               }
-                              disabled={!hasArbitrage}
                             />
                             {key}
                           </label>
@@ -244,7 +204,7 @@ export default function ArbitragePage() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.4, delay: 0.2 + index * 0.05 }}
                     >
-                      <Card className={`transition-base ${!hasArbitrage ? "opacity-60" : ""}`}>
+                      <Card className="transition-base">
                         <CardContent className="p-3 md:p-4">
                           <div className="flex flex-col md:flex-row md:items-center gap-4">
                             {/* Market Info */}
@@ -296,7 +256,6 @@ export default function ArbitragePage() {
                                 onClick={() =>
                                   setExpandedId(expandedId === opp.id ? null : opp.id)
                                 }
-                                disabled={!hasArbitrage}
                               >
                                 {expandedId === opp.id ? (
                                   <CaretUp weight="bold" className="h-4 w-4" />
@@ -309,7 +268,7 @@ export default function ArbitragePage() {
 
                           {/* Expanded Details */}
                           <AnimatePresence>
-                            {expandedId === opp.id && hasArbitrage && (
+                            {expandedId === opp.id && (
                               <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: "auto", opacity: 1 }}
@@ -386,9 +345,7 @@ export default function ArbitragePage() {
                     <div key={stat.label} className="flex items-center justify-between">
                       <span className="text-small text-muted-foreground">{stat.label}</span>
                       <span
-                        className={`text-small font-semibold ${
-                          !hasArbitrage ? "blur-sm" : ""
-                        }`}
+                        className="text-small font-semibold"
                       >
                         {stat.value}
                       </span>
