@@ -6,6 +6,12 @@ const replitDomains = process.env.REPLIT_DOMAINS
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: replitDomains,
+  async redirects() {
+    return [
+      { source: "/home", destination: "/", permanent: true },
+      { source: "/kalshi", destination: "/markets?source=kalshi", permanent: true },
+    ];
+  },
   images: {
     remotePatterns: [
       {

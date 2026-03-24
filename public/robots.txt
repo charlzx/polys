@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+Allow: /markets
+Allow: /pricing
+Allow: /privacy
+Allow: /terms
+Allow: /contact
+
+Disallow: /dashboard
+Disallow: /arbitrage
+Disallow: /whales
+Disallow: /alerts
+Disallow: /portfolio
+Disallow: /watchlist
+Disallow: /settings
+Disallow: /login
+Disallow: /signup
+Disallow: /auth
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /home
+Disallow: /kalshi
+Disallow: /api/
+
+Sitemap: https://polys.replit.app/sitemap.xml

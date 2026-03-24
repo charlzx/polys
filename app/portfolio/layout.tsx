@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Portfolio",
+  title: "Watchlist",
+  robots: { index: false, follow: false },
 };
 
 export default function PortfolioLayout({
