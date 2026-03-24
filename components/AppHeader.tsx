@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { MagnifyingGlass, Bell, House, TrendUpIcon, ArrowsClockwise, Wallet, Sparkle, Eye, ChartBar } from "@phosphor-icons/react";
+import { MagnifyingGlass, Bell, House, TrendUpIcon, ArrowsClockwise, Wallet, Sparkle, Eye, ChartBar, CheckCircle } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,7 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
   const router = useRouter();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const { user, logout } = useAuth();
-  const { notifications, count: notifCount, isLoading: notifLoading } = useNotifications(user?.id);
+  const { notifications, count: notifCount, isLoading: notifLoading, markAsRead, markAllAsRead } = useNotifications(user?.id);
 
   const displayName = user?.name ?? "User";
   const displayEmail = user?.email ?? "";
@@ -54,6 +54,16 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
   const handleSignOut = async () => {
     await logout();
     router.push("/login");
+  };
+
+  const handleMarkAllRead = async () => {
+    await markAllAsRead();
+  };
+
+  const handleMarkItemRead = async (e: React.MouseEvent, notificationId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await markAsRead(notificationId);
   };
 
   return (
@@ -104,9 +114,14 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
                   <div className="flex items-center justify-between">
                     <h4 className="text-small font-semibold">Notifications</h4>
                     {notifCount > 0 && (
-                      <Badge variant="secondary" className="text-caption">
-                        {notifCount} triggered
-                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-caption px-2 text-muted-foreground hover:text-foreground"
+                        onClick={handleMarkAllRead}
+                      >
+                        Mark all read
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -117,18 +132,25 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
                     </div>
                   ) : notifications.length === 0 ? (
                     <div className="p-6 text-center text-small text-muted-foreground">
-                      No alerts triggered in the last 24h
+                      No notifications yet
                     </div>
                   ) : (
                     notifications.map((notification) => (
                       <Link
                         key={notification.id}
-                        href="/alerts"
+                        href={notification.marketId ? `/markets/${notification.marketId}` : "/alerts"}
                         onClick={() => setNotificationsOpen(false)}
-                        className="block p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors bg-primary/5"
+                        className={cn(
+                          "block p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors",
+                          !notification.read && "bg-primary/5"
+                        )}
                       >
                         <div className="flex items-start gap-2">
-                          <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5" />
+                          {!notification.read ? (
+                            <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5" />
+                          ) : (
+                            <span className="w-2 h-2 shrink-0 mt-1.5" />
+                          )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
@@ -141,10 +163,20 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
                             <p className="text-small font-medium truncate">
                               {notification.marketName ?? notification.title}
                             </p>
-                            <p className="text-caption text-muted-foreground line-clamp-1 mt-0.5">
+                            <p className="text-caption text-muted-foreground line-clamp-2 mt-0.5">
                               {notification.description}
                             </p>
                           </div>
+                          {!notification.read && (
+                            <button
+                              type="button"
+                              title="Mark as read"
+                              className="shrink-0 text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+                              onClick={(e) => handleMarkItemRead(e, notification.id)}
+                            >
+                              <CheckCircle weight="regular" className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </Link>
                     ))

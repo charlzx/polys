@@ -33,6 +33,12 @@ interface GammaMarket {
   createdAt?: string;
 }
 
+interface KalshiMarketSimple {
+  ticker: string;
+  title: string;
+  yesMid: number;
+}
+
 function isAuthorized(request: Request): boolean {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) return false;
@@ -65,6 +71,23 @@ async function fetchTopMarkets(baseUrl: string, limit = 200): Promise<GammaMarke
     if (!res.ok) return [];
     const data = (await res.json()) as { markets?: GammaMarket[] };
     return Array.isArray(data.markets) ? data.markets : (data as unknown as GammaMarket[]);
+  } catch {
+    return [];
+  }
+}
+
+// Fetch Kalshi markets for arbitrage detection
+async function fetchKalshiMarkets(baseUrl: string): Promise<KalshiMarketSimple[]> {
+  try {
+    const res = await fetch(`${baseUrl}/api/kalshi?limit=200`, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { markets?: Array<{ ticker: string; marketTitle: string; eventTitle: string; yesMid: number }> };
+    if (!Array.isArray(data.markets)) return [];
+    return data.markets.map((m) => ({
+      ticker: m.ticker,
+      title: `${m.eventTitle} ${m.marketTitle}`.trim(),
+      yesMid: m.yesMid,
+    }));
   } catch {
     return [];
   }
@@ -133,6 +156,31 @@ function findFuzzyMarket(markets: GammaMarket[], name: string): GammaMarket | nu
   return bestScore >= 2 ? best : null;
 }
 
+// Simple keyword-based matching for arbitrage: find Kalshi market matching alert's market_name keyword.
+// Allows a match when either:
+//   a) at least 2 keyword words appear in the title (multi-word overlap), OR
+//   b) exactly 1 long keyword (>=5 chars) appears as a substring AND covers >=50% of meaningful words
+function findKalshiMatch(kalshiMarkets: KalshiMarketSimple[], keyword: string): KalshiMarketSimple | null {
+  const kw = keyword.toLowerCase();
+  const words = kw.split(/\s+/).filter((w) => w.length > 3);
+  if (words.length === 0) return null;
+  let best: KalshiMarketSimple | null = null;
+  let bestScore = 0;
+  for (const m of kalshiMarkets) {
+    const mLower = m.title.toLowerCase();
+    const matchCount = words.filter((w) => mLower.includes(w)).length;
+    if (matchCount > bestScore) {
+      bestScore = matchCount;
+      best = m;
+    }
+  }
+  if (best === null) return null;
+  // Allow strong single-word match: the one word must be long (>=5 chars) and be >=50% of query words
+  const isSingleStrongMatch = bestScore === 1 && words.length === 1 && words[0].length >= 5;
+  if (bestScore >= 2 || isSingleStrongMatch) return best;
+  return null;
+}
+
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -162,11 +210,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ checked: 0, triggered: 0 });
   }
 
+  const hasArbitrageAlerts = alerts.some((a) => a.alert_type === "arbitrage");
+
   // Fetch top markets for name matching and "new market" alerts.
   // Also pre-fetch specific markets by ID for alerts that have market_id stored.
-  const [topMarkets, specificMarketResults] = await Promise.all([
+  // Fetch Kalshi markets only if there are arbitrage alerts.
+  const [topMarkets, specificMarketResults, kalshiMarkets] = await Promise.all([
     fetchTopMarkets(origin),
-    // Fetch each alert's specific market by ID (when set), in parallel
     Promise.all(
       alerts
         .filter((a) => a.market_id)
@@ -175,6 +225,7 @@ export async function GET(request: Request) {
           market: await fetchMarketById(origin, a.market_id!),
         }))
     ),
+    hasArbitrageAlerts ? fetchKalshiMarkets(origin) : Promise.resolve([]),
   ]);
 
   // Build lookup maps
@@ -218,6 +269,7 @@ export async function GET(request: Request) {
     let changeText = "—";
     let resolvedMarketId: string | null = market?.id ?? null;
     let updatedSeenIds: string[] | null = null;
+    let notificationMessage = "";
 
     if (alert.alert_type === "odds" && market) {
       let prices: number[] = [0.5, 0.5];
@@ -227,6 +279,7 @@ export async function GET(request: Request) {
       if (yesPrice < alert.threshold) {
         shouldFire = true;
         changeText = `${yesPrice.toFixed(1)}% YES (below ${alert.threshold}% threshold)`;
+        notificationMessage = `${market.question.slice(0, 80)}: YES odds dropped to ${yesPrice.toFixed(1)}% (threshold: ${alert.threshold}%)`;
       }
     } else if (alert.alert_type === "volume" && market) {
       const vol24h = safeNum(market.volume24hr ?? 0);
@@ -234,6 +287,7 @@ export async function GET(request: Request) {
       if (vol24h >= alert.threshold * 1000) {
         shouldFire = true;
         changeText = `$${(vol24h / 1000).toFixed(1)}k 24h volume (above $${alert.threshold}k threshold)`;
+        notificationMessage = `${market.question.slice(0, 80)}: 24h volume reached $${(vol24h / 1000).toFixed(1)}k (threshold: $${alert.threshold}k)`;
       }
     } else if (alert.alert_type === "new") {
       // "New market" — only fires for markets NOT seen in previous check runs.
@@ -250,8 +304,31 @@ export async function GET(request: Request) {
           resolvedMarketId = newest.id;
           currentValue = newest.question.slice(0, 70) + (newest.question.length > 70 ? "…" : "");
           changeText = `${matched.length} new matching market${matched.length > 1 ? "s" : ""} found`;
+          notificationMessage = `New market matching "${alert.market_name}": ${newest.question.slice(0, 100)}`;
           // Record all currently visible matching markets as seen
           updatedSeenIds = [...seen, ...matched.map((m) => m.id)];
+        }
+      }
+    } else if (alert.alert_type === "arbitrage") {
+      // Arbitrage: compare YES price on Polymarket vs Kalshi for the same market keyword.
+      // Fires when the spread (difference in YES price) exceeds the alert threshold (in %).
+      const keyword = (alert.market_name ?? "").toLowerCase();
+      if (keyword && market && kalshiMarkets.length > 0) {
+        const kalshiMatch = findKalshiMatch(kalshiMarkets, keyword);
+        if (kalshiMatch) {
+          let prices: number[] = [0.5, 0.5];
+          try { prices = JSON.parse(market.outcomePrices || "[0.5,0.5]"); } catch { /* ok */ }
+          const polyYes = safeNum(prices[0]) * 100;
+          const kalshiYes = kalshiMatch.yesMid * 100;
+          const spread = Math.abs(polyYes - kalshiYes);
+          if (spread >= alert.threshold) {
+            shouldFire = true;
+            const highPlatform = polyYes > kalshiYes ? "Polymarket" : "Kalshi";
+            const lowPlatform = polyYes > kalshiYes ? "Kalshi" : "Polymarket";
+            currentValue = `${spread.toFixed(1)}% spread`;
+            changeText = `${highPlatform} YES: ${Math.max(polyYes, kalshiYes).toFixed(1)}% vs ${lowPlatform} YES: ${Math.min(polyYes, kalshiYes).toFixed(1)}%`;
+            notificationMessage = `Arbitrage on "${alert.market_name}": ${spread.toFixed(1)}% spread — ${highPlatform} ${Math.max(polyYes, kalshiYes).toFixed(1)}% vs ${lowPlatform} ${Math.min(polyYes, kalshiYes).toFixed(1)}%`;
+          }
         }
       }
     }
@@ -285,6 +362,26 @@ export async function GET(request: Request) {
     }
 
     triggered++;
+
+    // Insert a notification record for in-app delivery.
+    // If the insert fails, log and skip transitioning the alert so history is preserved
+    // and the cron will retry on the next run.
+    const finalMessage = notificationMessage || changeText;
+    const { error: notifErr } = await supabase.from("notifications").insert({
+      user_id: alert.user_id,
+      alert_id: alert.id,
+      alert_type: alert.alert_type,
+      market_id: resolvedMarketId,
+      market_name: alert.market_name,
+      message: finalMessage,
+      read: false,
+    });
+    if (notifErr) {
+      console.error(`[alerts/check] Failed to insert notification for alert ${alert.id}:`, notifErr.message);
+      // Don't mark alert as triggered — it will retry next cron run
+      triggered--;
+      continue;
+    }
 
     // Transition to 'triggered' — stays quiet until user manually re-arms it.
     const updatePayload: Record<string, unknown> = {

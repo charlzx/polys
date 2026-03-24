@@ -34,4 +34,15 @@ export async function runStartupMigration() {
       "File: supabase/migrations/003_watchlist.sql"
     );
   }
+
+  // Check notifications table
+  const { error: notificationsError } = await supabase.from("notifications").select("id").limit(1);
+  if (notificationsError?.code === "PGRST205") {
+    console.warn(
+      "[migrate] The 'notifications' table is missing from Supabase.\n" +
+      "Please run the migration SQL in your Supabase Dashboard:\n" +
+      "https://supabase.com/dashboard/project/wqeuoflqhacbmsktucac/sql/new\n" +
+      "File: supabase/migrations/004_notifications.sql"
+    );
+  }
 }
