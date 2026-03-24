@@ -47,6 +47,7 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 import { AppHeader } from "@/components/AppHeader";
 import { PublicHeader } from "@/components/PublicHeader";
 import { MobileNav } from "@/components/MobileNav";
+import { KalshiPriceChart } from "@/components/KalshiPriceChart";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -76,6 +77,7 @@ function formatEndDate(dateStr: string): string {
 
 function KalshiDetailDialog({ market, open, onClose }: { market: UnifiedMarket; open: boolean; onClose: () => void }) {
   const formattedEnd = formatEndDate(market.endDate);
+  const ticker = market.id.replace(/^kalshi-/, "");
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
@@ -97,6 +99,7 @@ function KalshiDetailDialog({ market, open, onClose }: { market: UnifiedMarket; 
               <div className="text-title font-bold text-destructive">{market.noOdds}%</div>
             </div>
           </div>
+          {open && <KalshiPriceChart ticker={ticker} days={7} />}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
               <span>Volume</span>

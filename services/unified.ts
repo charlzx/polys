@@ -96,7 +96,7 @@ export function kalshiToUnified(m: FlatKalshiMarket): UnifiedMarket {
     category: kalshiCategoryLabel(m.eventCategory),
     yesOdds,
     noOdds,
-    change24h: 0,
+    change24h: m.change24h ?? 0,
     volume: formatVolume(volumeRaw),
     volume24h: formatVolume(volumeRaw),
     volumeRaw,
