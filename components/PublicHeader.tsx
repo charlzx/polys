@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MobileNavTrigger } from "@/components/MobileNav";
+import { Logo } from "@/components/Logo";
 import { useAuth } from "@/hooks/useAuth";
 import {
   MagnifyingGlass,
@@ -53,11 +54,9 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
       <div className="container">
         <div className="flex h-14 items-center justify-between gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground text-small font-bold">P</span>
-            </div>
-            <span className="text-subtitle font-bold hidden sm:inline">Polys</span>
+          <Link href="/" className="flex items-center shrink-0">
+            <Logo size="sm" showWordmark className="hidden sm:inline-flex" />
+            <Logo size="sm" showWordmark={false} className="sm:hidden" />
           </Link>
 
           {/* Nav Links */}

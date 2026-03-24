@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Logo } from "@/components/Logo";
 
 const productLinks = [
   { label: "Markets", href: "/markets" },
@@ -25,8 +26,8 @@ export function Footer() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6">
           {/* Brand column */}
           <div className="flex flex-col gap-4">
-            <Link href="/" className="text-subtitle font-bold">
-              Polys
+            <Link href="/" className="flex items-center">
+              <Logo size="sm" showWordmark />
             </Link>
             <p className="text-small text-muted-foreground max-w-xs">
               Real-time prediction market intelligence across Polymarket and Kalshi.

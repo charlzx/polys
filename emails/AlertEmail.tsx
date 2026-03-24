@@ -168,6 +168,8 @@ const container: React.CSSProperties = {
 
 const headerSection: React.CSSProperties = {
   marginBottom: "24px",
+  borderLeft: "3px solid #6366f1",
+  paddingLeft: "12px",
 };
 
 const logoText: React.CSSProperties = {

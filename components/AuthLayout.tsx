@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { features } from "@/data/features";
+import { Logo } from "@/components/Logo";
 
 interface AuthLayoutProps {
   children: React.ReactNode;
@@ -12,8 +13,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <div className="hidden lg:flex lg:w-1/2 bg-secondary/30 border-r border-border">
         <div className="flex flex-col justify-between p-12 w-full">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-title font-bold">Polys</span>
+          <Link href="/" className="flex items-center">
+            <Logo size="lg" showWordmark />
           </Link>
 
           {/* Headline + Features */}
@@ -55,8 +56,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <div className="flex-1 flex flex-col lg:w-1/2">
         {/* Mobile Header */}
         <header className="lg:hidden h-14 flex items-center px-4 border-b border-border">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-subtitle font-bold">Polys</span>
+          <Link href="/" className="flex items-center">
+            <Logo size="sm" showWordmark />
           </Link>
         </header>
 
