@@ -11,8 +11,10 @@ export interface UnifiedMarket {
   noOdds: number;
   change24h: number;
   volume: string;
+  volume24h: string;
   volumeRaw: number;
   liquidity: string;
+  endDate: string;
   image?: string;
   source: MarketSource;
   externalUrl?: string;
@@ -59,9 +61,7 @@ function parseDollarString(s: string): number {
 
 export function polymarketToUnified(m: TransformedMarket): UnifiedMarket {
   const volumeRaw =
-    typeof m.volume24h === "number"
-      ? m.volume24h
-      : typeof m.volume24h === "string" && m.volume24h
+    typeof m.volume24h === "string" && m.volume24h
       ? parseDollarString(m.volume24h)
       : typeof m.volume === "string" && m.volume
       ? parseDollarString(m.volume)
@@ -74,9 +74,11 @@ export function polymarketToUnified(m: TransformedMarket): UnifiedMarket {
     yesOdds: m.yesOdds,
     noOdds: m.noOdds,
     change24h: m.change24h,
-    volume: m.volume24h ? String(m.volume24h) : m.volume,
+    volume: m.volume,
+    volume24h: m.volume24h ?? "—",
     volumeRaw,
     liquidity: m.liquidity ?? "—",
+    endDate: m.endDate ?? "",
     image: m.image,
     source: "polymarket",
     yesTokenId: m.yesTokenId,
@@ -96,8 +98,10 @@ export function kalshiToUnified(m: FlatKalshiMarket): UnifiedMarket {
     noOdds,
     change24h: 0,
     volume: formatVolume(volumeRaw),
+    volume24h: formatVolume(volumeRaw),
     volumeRaw,
     liquidity: "—",
+    endDate: m.closeTime ? m.closeTime.split("T")[0] : "",
     source: "kalshi",
     externalUrl: m.externalUrl,
   };
