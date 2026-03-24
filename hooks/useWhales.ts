@@ -22,6 +22,9 @@ export interface WhaleEntry {
 
 export interface WhalesLeaderboard {
   whales: WhaleEntry[];
+  refreshedAt?: string;
+  discovered?: number;
+  source?: string;
 }
 
 export interface ActivityEvent {

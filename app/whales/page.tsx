@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -174,12 +174,17 @@ function WhaleCard({ whale, rank }: { whale: WhaleEntry; rank: number }) {
 
 export default function WhalesPage() {
   const [search, setSearch] = useState("");
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const router = useRouter();
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
   const { user } = useAuth();
   const isPro = user?.tier === "pro" || user?.tier === "premium";
 
-  const { data, isLoading, isError } = useWhalesLeaderboard(10);
+  const { data, isLoading, isError, dataUpdatedAt } = useWhalesLeaderboard(10);
+
+  useEffect(() => {
+    if (dataUpdatedAt) setLastRefreshed(new Date(dataUpdatedAt));
+  }, [dataUpdatedAt]);
 
   const allWhales = data?.whales ?? [];
   const displayWhales = isPro ? allWhales : allWhales.slice(0, FREE_LIMIT);
@@ -260,17 +265,24 @@ export default function WhalesPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.15 }}
               >
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-start justify-between mb-3 gap-2">
                   <div className="flex items-center gap-2">
                     <ChartBar weight="duotone" className="h-5 w-5 text-primary" />
                     <h2 className="text-subtitle font-semibold">Top Tracked Wallets</h2>
                   </div>
-                  {!isPro && (
-                    <Badge variant="secondary" className="text-caption gap-1">
-                      <Sparkle weight="fill" className="h-3 w-3 text-primary" />
-                      Pro: full list
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {lastRefreshed && (
+                      <span className="text-caption text-muted-foreground hidden sm:block">
+                        Refreshed {relativeTime(lastRefreshed.toISOString())}
+                      </span>
+                    )}
+                    {!isPro && (
+                      <Badge variant="secondary" className="text-caption gap-1">
+                        <Sparkle weight="fill" className="h-3 w-3 text-primary" />
+                        Pro: full list
+                      </Badge>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -280,6 +292,16 @@ export default function WhalesPage() {
                     <Card>
                       <CardContent className="p-6 text-center text-muted-foreground text-small">
                         Failed to load whale data. Try again later.
+                      </CardContent>
+                    </Card>
+                  ) : allWhales.length === 0 ? (
+                    <Card>
+                      <CardContent className="p-8 text-center">
+                        <Eye weight="duotone" className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-small font-medium mb-1">No high-volume traders detected recently</p>
+                        <p className="text-caption text-muted-foreground">
+                          Check back soon — the leaderboard refreshes every 30 seconds.
+                        </p>
                       </CardContent>
                     </Card>
                   ) : (
