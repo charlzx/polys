@@ -48,10 +48,24 @@ export default function PrivacyPage() {
         <section className="space-y-3">
           <h2 className="text-subtitle font-semibold">4. Cookies and local storage</h2>
           <p className="text-muted-foreground leading-relaxed">
-            We use authentication cookies managed by Supabase to keep you signed in. We
-            also store your display preferences (theme, density, font size) in your
-            browser&rsquo;s local storage. We do not use advertising or cross-site
-            tracking cookies.
+            We use cookies and local storage in two ways:
+          </p>
+          <ul className="list-disc pl-5 space-y-1.5 text-muted-foreground">
+            <li>
+              <span className="font-medium text-foreground">Necessary.</span> Authentication
+              cookies (managed by Supabase) keep you signed in. Local storage holds your
+              display preferences such as theme and layout. These are always active.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Analytics (optional).</span> With
+              your consent, we may use privacy-friendly analytics tools to understand how
+              people use Polys — such as which pages are visited and which features are used
+              most. This data is used solely to improve the product and is never sold. You
+              can opt out at any time by clearing your cookie consent in your browser.
+            </li>
+          </ul>
+          <p className="text-muted-foreground leading-relaxed">
+            We do not use advertising cookies or cross-site tracking cookies.
           </p>
         </section>
 
