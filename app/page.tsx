@@ -30,6 +30,12 @@ import {
   Pulse,
   Newspaper,
 } from "@phosphor-icons/react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useState, useMemo, useRef } from "react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 
@@ -97,98 +103,146 @@ function PredictionsTicker({ markets }: { markets: UnifiedMarket[] }) {
   );
 }
 
+// Homepage Kalshi detail dialog
+function HomepageKalshiDialog({ market, open, onClose }: { market: UnifiedMarket; open: boolean; onClose: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base leading-snug">{market.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-caption">{market.category}</Badge>
+            <SourceBadgeTiny source={market.source} />
+          </div>
+          <div className="flex gap-4">
+            <div className="flex-1 text-center p-3 rounded-lg bg-success/10">
+              <div className="text-caption text-muted-foreground mb-1">YES</div>
+              <div className="text-title font-bold text-success">{market.yesOdds}%</div>
+            </div>
+            <div className="flex-1 text-center p-3 rounded-lg bg-destructive/10">
+              <div className="text-caption text-muted-foreground mb-1">NO</div>
+              <div className="text-title font-bold text-destructive">{market.noOdds}%</div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+            <span>Volume</span>
+            <span className="font-medium">{market.volume}</span>
+          </div>
+          {market.externalUrl && (
+            <a href={market.externalUrl} target="_blank" rel="noopener noreferrer" className="block">
+              <button className="w-full py-2 px-4 rounded-md bg-secondary text-secondary-foreground text-small font-medium hover:bg-secondary/80 transition-colors">
+                View on Kalshi
+              </button>
+            </a>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // Featured market component with animation
 function FeaturedMarket({ market, isLive, index }: { market: UnifiedMarket; isLive?: boolean; index: number }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-50px" });
   const isKalshi = market.source === "kalshi";
-  const href = isKalshi ? `/markets?source=kalshi` : `/markets/${market.id}`;
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 30 }}
-      animate={isInView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.5, delay: index * 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
-    >
-      <Link
-        href={href}
-        className="block rounded-xl bg-card border border-border hover:border-primary/40 transition-all group overflow-hidden min-h-[44px]"
-      >
-        <div className="relative w-full h-28 bg-secondary/50">
-          {market.image ? (
-            <Image
-              src={market.image}
-              alt={market.name}
-              fill
-              className="object-cover"
-              sizes="(max-width: 768px) 100vw, 25vw"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Newspaper className="h-8 w-8 text-muted-foreground/30" />
+  const cardContent = (
+    <div className="block rounded-xl bg-card border border-border hover:border-primary/40 transition-all group overflow-hidden min-h-[44px] cursor-pointer">
+      <div className="relative w-full h-28 bg-secondary/50">
+        {market.image ? (
+          <Image
+            src={market.image}
+            alt={market.name}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 25vw"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Newspaper className="h-8 w-8 text-muted-foreground/30" />
+          </div>
+        )}
+      </div>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <Badge variant="outline" className="text-caption">
+                {market.category}
+              </Badge>
+              <SourceBadgeTiny source={market.source} />
+              {isLive && market.source === "polymarket" && (
+                <span className="flex items-center gap-1 text-caption text-success">
+                  <Broadcast weight="fill" className="h-2.5 w-2.5 animate-pulse" />
+                  Live
+                </span>
+              )}
             </div>
-          )}
-        </div>
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <Badge variant="outline" className="text-caption">
-                  {market.category}
-                </Badge>
-                <SourceBadgeTiny source={market.source} />
-                {isLive && market.source === "polymarket" && (
-                  <span className="flex items-center gap-1 text-caption text-success">
-                    <Broadcast weight="fill" className="h-2.5 w-2.5 animate-pulse" />
-                    Live
-                  </span>
-                )}
-              </div>
-              <h3 className="text-body font-medium mb-1 group-hover:text-primary transition-colors line-clamp-2">
-                {market.name}
-              </h3>
-              <div className="flex items-center gap-3 text-caption text-muted-foreground">
-                <span>{market.volume} Vol</span>
-                {market.change24h !== 0 && (
-                  <span
-                    className={`flex items-center gap-0.5 ${
-                      market.change24h >= 0 ? "text-success" : "text-destructive"
-                    }`}
-                  >
-                    {market.change24h >= 0 ? (
-                      <TrendUpIcon weight="bold" className="h-3 w-3" />
-                    ) : (
-                      <TrendDownIcon weight="bold" className="h-3 w-3" />
-                    )}
-                    {market.change24h >= 0 ? "+" : ""}
-                    {market.change24h}%
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="text-right shrink-0">
-              <div className="text-subtitle font-bold text-success">
-                {market.yesOdds}%
-              </div>
-              <div className="text-caption text-muted-foreground">YES</div>
+            <h3 className="text-body font-medium mb-1 group-hover:text-primary transition-colors line-clamp-2">
+              {market.name}
+            </h3>
+            <div className="flex items-center gap-3 text-caption text-muted-foreground">
+              <span>{market.volume} Vol</span>
+              {market.change24h !== 0 && (
+                <span
+                  className={`flex items-center gap-0.5 ${
+                    market.change24h >= 0 ? "text-success" : "text-destructive"
+                  }`}
+                >
+                  {market.change24h >= 0 ? (
+                    <TrendUpIcon weight="bold" className="h-3 w-3" />
+                  ) : (
+                    <TrendDownIcon weight="bold" className="h-3 w-3" />
+                  )}
+                  {market.change24h >= 0 ? "+" : ""}
+                  {market.change24h}%
+                </span>
+              )}
             </div>
           </div>
+          <div className="text-right shrink-0">
+            <div className="text-subtitle font-bold text-success">
+              {market.yesOdds}%
+            </div>
+            <div className="text-caption text-muted-foreground">YES</div>
+          </div>
         </div>
-      </Link>
-    </motion.div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <motion.div
+        ref={ref}
+        initial={{ opacity: 0, y: 30 }}
+        animate={isInView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.5, delay: index * 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
+      >
+        {isKalshi ? (
+          <div onClick={() => setDialogOpen(true)}>{cardContent}</div>
+        ) : (
+          <Link href={`/markets/${market.id}`}>{cardContent}</Link>
+        )}
+      </motion.div>
+      {isKalshi && (
+        <HomepageKalshiDialog market={market} open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      )}
+    </>
   );
 }
 
 // Mobile-friendly market row
 function MarketRow({ market, rank }: { market: UnifiedMarket; rank: number }) {
   const isKalshi = market.source === "kalshi";
-  const href = isKalshi ? `/markets?source=kalshi` : `/markets/${market.id}`;
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors group min-h-[44px]"
-    >
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const rowContent = (
+    <div className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors group min-h-[44px] cursor-pointer">
       <span className="text-caption text-muted-foreground w-5 text-center font-mono shrink-0">
         {rank}
       </span>
@@ -240,7 +294,20 @@ function MarketRow({ market, rank }: { market: UnifiedMarket; rank: number }) {
         </span>
         <CaretRight weight="bold" className="h-4 w-4 text-muted-foreground" />
       </div>
-    </Link>
+    </div>
+  );
+
+  return (
+    <>
+      {isKalshi ? (
+        <div onClick={() => setDialogOpen(true)}>{rowContent}</div>
+      ) : (
+        <Link href={`/markets/${market.id}`}>{rowContent}</Link>
+      )}
+      {isKalshi && (
+        <HomepageKalshiDialog market={market} open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      )}
+    </>
   );
 }
 

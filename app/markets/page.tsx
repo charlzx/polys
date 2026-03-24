@@ -114,16 +114,14 @@ function MarketCard({ market, isWatched, onToggleWatch, index }: {
   const [dialogOpen, setDialogOpen] = useState(false);
   const isKalshi = market.source === "kalshi";
 
-  const cardContent = (
+  const inner = (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.05 }}
+      className="h-full"
     >
-      <Card
-        className={`group hover:border-primary/30 transition-base relative overflow-hidden h-full flex flex-col ${isKalshi ? "cursor-pointer" : ""}`}
-        onClick={isKalshi ? () => setDialogOpen(true) : undefined}
-      >
+      <Card className="group hover:border-primary/30 transition-base relative overflow-hidden h-full flex flex-col">
         <div className="relative w-full h-28 bg-secondary/50">
           {market.image ? (
             <Image
@@ -189,28 +187,14 @@ function MarketCard({ market, isWatched, onToggleWatch, index }: {
           </div>
 
           <div className="mt-auto">
-            {isKalshi ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="w-full hover:bg-primary hover:text-primary-foreground active:scale-95 transition-all cursor-pointer"
-                onClick={(e) => { e.stopPropagation(); setDialogOpen(true); }}
-              >
-                View Details
-                <ArrowUpRight weight="bold" className="ml-2 h-4 w-4" />
-              </Button>
-            ) : (
-              <Link href={`/markets/${market.id}`} className="block" onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="w-full hover:bg-primary hover:text-primary-foreground active:scale-95 transition-all cursor-pointer"
-                >
-                  View Details
-                  <ArrowUpRight weight="bold" className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full hover:bg-primary hover:text-primary-foreground active:scale-95 transition-all cursor-pointer"
+            >
+              View Details
+              <ArrowUpRight weight="bold" className="ml-2 h-4 w-4" />
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -219,7 +203,15 @@ function MarketCard({ market, isWatched, onToggleWatch, index }: {
 
   return (
     <>
-      {cardContent}
+      {isKalshi ? (
+        <div onClick={() => setDialogOpen(true)} className="cursor-pointer h-full">
+          {inner}
+        </div>
+      ) : (
+        <Link href={`/markets/${market.id}`} className="block h-full">
+          {inner}
+        </Link>
+      )}
       {isKalshi && (
         <KalshiDetailDialog market={market} open={dialogOpen} onClose={() => setDialogOpen(false)} />
       )}
