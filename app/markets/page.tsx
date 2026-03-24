@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -257,7 +257,7 @@ function MarketSkeleton() {
   );
 }
 
-export default function MarketsPage() {
+function MarketsContent() {
   const { isAuthenticated } = useAuth();
   const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
@@ -734,5 +734,13 @@ function KalshiListRow({ market, isWatched, onToggleWatch }: { market: UnifiedMa
       </div>
       <KalshiDetailDialog market={market} open={dialogOpen} onClose={() => setDialogOpen(false)} />
     </>
+  );
+}
+
+export default function MarketsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <MarketsContent />
+    </Suspense>
   );
 }
