@@ -100,17 +100,28 @@ export function useMarketIntelligence(markets: TransformedMarket[]) {
     queryFn: () =>
       fetchMarketIntelligence(markets).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("401") || msg.includes("403") || msg.includes("Unauthorized") || msg.includes("Forbidden")) {
-          return [] as MarketIntelligenceItem[];
+        const isAuthError =
+          msg.includes("401") ||
+          msg.includes("403") ||
+          msg.includes("Unauthorized") ||
+          msg.includes("Forbidden") ||
+          msg.includes("Authentication");
+        if (!isAuthError) {
+          console.error("[MarketIntelligence]", err);
         }
-        console.error("[MarketIntelligence]", err);
         return [] as MarketIntelligenceItem[];
       }),
     enabled: markets.length > 0,
     staleTime: 15 * 60_000,
     retry: (failureCount, err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("401") || msg.includes("403") || msg.includes("Unauthorized") || msg.includes("Forbidden")) {
+      if (
+        msg.includes("401") ||
+        msg.includes("403") ||
+        msg.includes("Unauthorized") ||
+        msg.includes("Forbidden") ||
+        msg.includes("Authentication")
+      ) {
         return false;
       }
       return failureCount < 1;

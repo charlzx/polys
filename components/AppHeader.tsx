@@ -74,7 +74,7 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
         <div className="h-16 grid grid-cols-3 items-center px-4 lg:px-6 border-b border-border/50">
           {/* Left Section */}
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="flex items-center">
+            <Link href="/" className="flex items-center">
               <Logo size="sm" showWordmark />
             </Link>
           </div>
