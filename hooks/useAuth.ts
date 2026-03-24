@@ -10,6 +10,7 @@ export interface User {
   email: string;
   avatar?: string;
   tier: "free" | "pro" | "premium";
+  lastSignInAt?: string;
 }
 
 export interface Profile {
@@ -76,6 +77,7 @@ function buildUser(session: Session, profile: Profile | null): User {
       "User",
     avatar: profile?.avatar_url ?? meta.avatar_url,
     tier: profile?.tier ?? (meta.tier as User["tier"]) ?? "free",
+    lastSignInAt: u.last_sign_in_at ?? undefined,
   };
 }
 

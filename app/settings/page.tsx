@@ -415,7 +415,19 @@ function SettingsContent() {
               <div>
                 <p className="text-small font-medium">Current Session</p>
                 <p className="text-caption text-muted-foreground">
-                  {profileEmail} &bull; Active now
+                  {profileEmail}
+                  {user?.lastSignInAt && (
+                    <>
+                      {" "}&bull;{" "}Last sign-in{" "}
+                      {new Date(user.lastSignInAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </>
+                  )}
                 </p>
               </div>
               <Badge variant="secondary">Active</Badge>
