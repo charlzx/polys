@@ -82,15 +82,15 @@ export async function fetchWatchlistSuggestions(
   return res.json();
 }
 
-// React Query hooks — 15-minute cache as per spec
+const CLIENT_STALE_MS = 2 * 60 * 60_000; // 2 hours — matches server-side cache TTL
+
 export function useMarketSummary(marketId: string | undefined) {
   return useQuery({
     queryKey: ["ai-summary", marketId],
     queryFn: () => fetchMarketSummary(marketId!),
     enabled: !!marketId,
-    staleTime: 15 * 60_000,
-    retry: 1,
-    retryDelay: 2000,
+    staleTime: CLIENT_STALE_MS,
+    retry: false,
   });
 }
 
@@ -112,20 +112,8 @@ export function useMarketIntelligence(markets: TransformedMarket[]) {
         return [] as MarketIntelligenceItem[];
       }),
     enabled: markets.length > 0,
-    staleTime: 15 * 60_000,
-    retry: (failureCount, err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (
-        msg.includes("401") ||
-        msg.includes("403") ||
-        msg.includes("Unauthorized") ||
-        msg.includes("Forbidden") ||
-        msg.includes("Authentication")
-      ) {
-        return false;
-      }
-      return failureCount < 1;
-    },
+    staleTime: CLIENT_STALE_MS,
+    retry: false,
   });
 }
 
@@ -134,8 +122,8 @@ export function useWatchlistOneLiner(market: TransformedMarket | undefined) {
     queryKey: ["ai-oneliner", market?.id],
     queryFn: () => fetchWatchlistOneLiner(market!),
     enabled: !!market,
-    staleTime: 15 * 60_000,
-    retry: 1,
+    staleTime: CLIENT_STALE_MS,
+    retry: false,
   });
 }
 
@@ -148,7 +136,7 @@ export function useWatchlistSuggestions(
     queryKey: ["ai-suggestions", categories.join(","), seenIds.slice(0, 10).join(",")],
     queryFn: () => fetchWatchlistSuggestions(categories, seenIds, allMarkets),
     enabled: categories.length > 0 && allMarkets.length > 0,
-    staleTime: 15 * 60_000,
-    retry: 1,
+    staleTime: CLIENT_STALE_MS,
+    retry: false,
   });
 }

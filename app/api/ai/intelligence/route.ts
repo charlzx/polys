@@ -4,6 +4,39 @@ import { requireAuth } from "@/lib/ai-auth";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+  staleAt: number;
+}
+
+const intelligenceCache = new Map<string, CacheEntry<unknown[]>>();
+
+function makeFingerprint(marketIds: string[]): string {
+  return [...marketIds].sort().join(",");
+}
+
+function getCached(key: string): { data: unknown[]; stale: boolean } | null {
+  const entry = intelligenceCache.get(key);
+  if (!entry) return null;
+  const now = Date.now();
+  if (now > entry.expiresAt) {
+    intelligenceCache.delete(key);
+    return null;
+  }
+  return { data: entry.data, stale: now > entry.staleAt };
+}
+
+function setCache(key: string, data: unknown[]): void {
+  intelligenceCache.set(key, {
+    data,
+    staleAt: Date.now() + CACHE_TTL_MS,
+    expiresAt: Date.now() + CACHE_TTL_MS * 2,
+  });
+}
+
 export async function POST(req: NextRequest) {
   const authError = await requireAuth(req);
   if (authError) return authError;
@@ -30,6 +63,14 @@ export async function POST(req: NextRequest) {
 
   if (markets.length === 0) {
     return NextResponse.json([]);
+  }
+
+  const cacheKey = makeFingerprint(markets.map((m) => m.id));
+
+  const cached = getCached(cacheKey);
+  if (cached) {
+    const headers: Record<string, string> = { "x-cache": cached.stale ? "stale" : "hit" };
+    return NextResponse.json(cached.data, { headers });
   }
 
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -60,12 +101,10 @@ Return ONLY valid JSON array, no markdown, no explanation.`;
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    // Strip markdown code fences, then extract the first JSON array
     const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
     const match = stripped.match(/(\[[\s\S]*\])/);
     const jsonStr = match ? match[1] : stripped;
     const parsed: unknown[] = JSON.parse(jsonStr);
-    // Validate and normalize each item
     const validated = (Array.isArray(parsed) ? parsed : []).map((item) => {
       const i = item as Record<string, unknown>;
       return {
@@ -81,9 +120,12 @@ Return ONLY valid JSON array, no markdown, no explanation.`;
           : "medium",
       };
     }).filter((i) => i.marketId && i.marketName);
+    setCache(cacheKey, validated);
     return NextResponse.json(validated);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("Gemini intelligence parse error:", err);
+    const staleEntry = intelligenceCache.get(cacheKey);
+    if (staleEntry) return NextResponse.json(staleEntry.data, { headers: { "x-cache": "stale-on-error" } });
     return NextResponse.json([]);
   }
 }

@@ -4,6 +4,39 @@ import { requireAuth } from "@/lib/ai-auth";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+  staleAt: number;
+}
+
+const suggestionsCache = new Map<string, CacheEntry<unknown[]>>();
+
+function makeFingerprint(categories: string[], candidateIds: string[]): string {
+  return `${[...categories].sort().join(",")}|${[...candidateIds].sort().join(",")}`;
+}
+
+function getCached(key: string): { data: unknown[]; stale: boolean } | null {
+  const entry = suggestionsCache.get(key);
+  if (!entry) return null;
+  const now = Date.now();
+  if (now > entry.expiresAt) {
+    suggestionsCache.delete(key);
+    return null;
+  }
+  return { data: entry.data, stale: now > entry.staleAt };
+}
+
+function setCache(key: string, data: unknown[]): void {
+  suggestionsCache.set(key, {
+    data,
+    staleAt: Date.now() + CACHE_TTL_MS,
+    expiresAt: Date.now() + CACHE_TTL_MS * 2,
+  });
+}
+
 export async function POST(req: NextRequest) {
   const authError = await requireAuth(req);
   if (authError) return authError;
@@ -30,6 +63,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (candidates.length === 0) return NextResponse.json([]);
+
+  const cacheKey = makeFingerprint(categories, candidates.map((c) => c.id));
+
+  const cached = getCached(cacheKey);
+  if (cached) {
+    const headers: Record<string, string> = { "x-cache": cached.stale ? "stale" : "hit" };
+    return NextResponse.json(cached.data, { headers });
+  }
 
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
@@ -59,9 +100,13 @@ Return ONLY valid JSON array, no markdown.`;
     const text = result.response.text().trim();
     const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
     const parsed = JSON.parse(cleaned);
-    return NextResponse.json(parsed.slice(0, 3));
-  } catch (err) {
+    const responseData = parsed.slice(0, 3);
+    setCache(cacheKey, responseData);
+    return NextResponse.json(responseData);
+  } catch (err: unknown) {
     console.error("Gemini suggestions parse error:", err);
+    const staleEntry = suggestionsCache.get(cacheKey);
+    if (staleEntry) return NextResponse.json(staleEntry.data, { headers: { "x-cache": "stale-on-error" } });
     return NextResponse.json([]);
   }
 }

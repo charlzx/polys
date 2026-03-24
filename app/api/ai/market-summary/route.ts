@@ -5,9 +5,37 @@ import { requireAuth } from "@/lib/ai-auth";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GAMMA_API = "https://gamma-api.polymarket.com";
 
+const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+  staleAt: number;
+}
+
+const summaryCache = new Map<string, CacheEntry<Record<string, unknown>>>();
+
+function getCached(key: string): { data: Record<string, unknown>; stale: boolean } | null {
+  const entry = summaryCache.get(key);
+  if (!entry) return null;
+  const now = Date.now();
+  if (now > entry.expiresAt) {
+    summaryCache.delete(key);
+    return null;
+  }
+  return { data: entry.data, stale: now > entry.staleAt };
+}
+
+function setCache(key: string, data: Record<string, unknown>): void {
+  summaryCache.set(key, {
+    data,
+    staleAt: Date.now() + CACHE_TTL_MS,
+    expiresAt: Date.now() + CACHE_TTL_MS * 2,
+  });
+}
+
 // Parse Gamma market fields into a clean prompt-ready shape
 function extractMarketFields(raw: Record<string, unknown>) {
-  // Parse yes/no odds from outcomePrices
   let yesOdds = 50;
   let noOdds = 50;
   try {
@@ -22,7 +50,6 @@ function extractMarketFields(raw: Record<string, unknown>) {
     }
   } catch { /* ignore */ }
 
-  // Parse 24h change
   let change24h = 0;
   const rawChange = raw.oneDayPriceChange;
   if (rawChange !== undefined && rawChange !== null) {
@@ -30,7 +57,6 @@ function extractMarketFields(raw: Record<string, unknown>) {
     if (!isNaN(parsed)) change24h = parseFloat((parsed * 100).toFixed(1));
   }
 
-  // Format volume/liquidity
   const formatDollar = (v: unknown): string => {
     const n = typeof v === "number" ? v : parseFloat(String(v ?? "0"));
     if (isNaN(n) || n === 0) return "$0";
@@ -67,7 +93,6 @@ async function fetchMarketFromGamma(id: string): Promise<Record<string, unknown>
     }
   } catch { /* fall through */ }
 
-  // Fallback: query by conditionId if hex
   if (id.startsWith("0x")) {
     try {
       const res = await fetch(`${GAMMA_API}/markets?conditionId=${id}`, {
@@ -85,7 +110,6 @@ async function fetchMarketFromGamma(id: string): Promise<Record<string, unknown>
 }
 
 export async function GET(req: NextRequest) {
-  // Require authenticated session
   const authError = await requireAuth(req);
   if (authError) return authError;
 
@@ -101,9 +125,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "AI features require a GEMINI_API_KEY" }, { status: 503 });
   }
 
-  // Fetch raw market data directly from Gamma API (avoids relative URL issues in server context)
-  const rawMarket = await fetchMarketFromGamma(marketId);
+  const cacheKey = `${marketId}:${mode}`;
 
+  const cached = getCached(cacheKey);
+  if (cached) {
+    const headers: Record<string, string> = { "x-cache": cached.stale ? "stale" : "hit" };
+    return NextResponse.json(cached.data, { headers });
+  }
+
+  const rawMarket = await fetchMarketFromGamma(marketId);
   if (!rawMarket) {
     return NextResponse.json({ error: "Market not found" }, { status: 404 });
   }
@@ -135,9 +165,13 @@ Respond with just the one sentence, no quotes, no formatting.`;
     try {
       const result = await model.generateContent(prompt);
       const oneLiner = result.response.text().trim();
-      return NextResponse.json({ oneLiner });
-    } catch (err) {
+      const responseData = { oneLiner };
+      setCache(cacheKey, responseData);
+      return NextResponse.json(responseData);
+    } catch (err: unknown) {
       console.error("Gemini oneliner error:", err);
+      const staleEntry = summaryCache.get(cacheKey);
+      if (staleEntry) return NextResponse.json(staleEntry.data, { headers: { "x-cache": "stale-on-error" } });
       return NextResponse.json({ oneLiner: "" });
     }
   }
@@ -157,21 +191,24 @@ Return ONLY valid JSON, no markdown, no explanation.`;
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    // Strip markdown code fences, then extract the first JSON object
     const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
     const match = stripped.match(/(\{[\s\S]*\})/);
     const jsonStr = match ? match[1] : stripped;
     const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
 
-    return NextResponse.json({
+    const responseData = {
       sentiment: typeof parsed.sentiment === "string" ? parsed.sentiment : "Neutral",
       riskFactors: Array.isArray(parsed.riskFactors) ? parsed.riskFactors : [],
       priceMovementInsight: typeof parsed.priceMovementInsight === "string" ? parsed.priceMovementInsight : "",
       probabilityAssessment: typeof parsed.probabilityAssessment === "string" ? parsed.probabilityAssessment : "",
       oneLiner: typeof parsed.oneLiner === "string" ? parsed.oneLiner : "",
-    });
-  } catch (err) {
+    };
+    setCache(cacheKey, responseData);
+    return NextResponse.json(responseData);
+  } catch (err: unknown) {
     console.error("Gemini market-summary parse error:", err);
+    const staleEntry = summaryCache.get(cacheKey);
+    if (staleEntry) return NextResponse.json(staleEntry.data, { headers: { "x-cache": "stale-on-error" } });
     return NextResponse.json({
       sentiment: "Neutral",
       riskFactors: [],
