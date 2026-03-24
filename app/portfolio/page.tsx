@@ -55,7 +55,7 @@ export default function PortfolioPage() {
             className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
           >
             <div>
-              <h1 className="text-title md:text-display font-bold">Tracked Markets</h1>
+              <h1 className="text-title md:text-display font-bold">Watchlist</h1>
               <p className="text-small text-muted-foreground mt-1">
                 Your watchlisted markets and how they&apos;re moving
               </p>

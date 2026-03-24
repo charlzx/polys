@@ -64,7 +64,7 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
               Markets
             </Link>
             <Link href="/dashboard" className="text-small text-muted-foreground hover:text-foreground transition-colors">
-              Analytics
+              Dashboard
             </Link>
             <Link href="/arbitrage" className="text-small text-muted-foreground hover:text-foreground transition-colors">
               Arbitrage

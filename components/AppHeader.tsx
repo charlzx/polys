@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { MagnifyingGlass, Bell, House, TrendUpIcon, ArrowsClockwise, Wallet, Sparkle, Eye, CheckCircle } from "@phosphor-icons/react";
+import { MagnifyingGlass, Bell, House, TrendUpIcon, ArrowsClockwise, BookmarkSimple, Sparkle, Eye, CheckCircle } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,7 @@ const navTabs = [
   { label: "Markets", href: "/markets", icon: TrendUpIcon },
   { label: "Whales", href: "/whales", icon: Eye },
   { label: "Arbitrage", href: "/arbitrage", icon: ArrowsClockwise, premium: true },
-  { label: "Portfolio", href: "/portfolio", icon: Wallet },
+  { label: "Watchlist", href: "/portfolio", icon: BookmarkSimple },
   { label: "Alerts", href: "/alerts", icon: Bell },
 ];
 
