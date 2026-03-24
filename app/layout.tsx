@@ -11,7 +11,7 @@ const geist = Geist({
   display: "swap",
 });
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://polys.replit.app";
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://polys.vercel.app";
 
 export const metadata: Metadata = {
   title: {

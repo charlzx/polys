@@ -22,4 +22,4 @@ Disallow: /home
 Disallow: /kalshi
 Disallow: /api/
 
-Sitemap: https://polys.replit.app/sitemap.xml
+Sitemap: https://polys.vercel.app/sitemap.xml

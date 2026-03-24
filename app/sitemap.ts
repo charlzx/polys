@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://polys.replit.app";
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://polys.vercel.app";
 const GAMMA_API = "https://gamma-api.polymarket.com";
 
 interface GammaMarket {
