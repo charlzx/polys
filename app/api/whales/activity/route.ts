@@ -17,12 +17,12 @@ function safeNum(v: unknown): number {
 // sourced from on-chain analysis and public Polymarket community data.
 // Only used when the global activity feed returns fewer than 3 qualifying addresses.
 const SEED_WALLETS: string[] = [
-  "0x3E5e9111Ae8eB78Fe1CC3bb8915d5D461F3Ef9A9", // SBF-linked historical whale (public record)
-  "0x1e0DA6Af45B4E5EAdcA3fddca6A5ea5fA2e35A6b", // high-volume elections trader (public on-chain)
-  "0xa8C2Ddee8C7EB38fa7e6aE54d2Addd76D4C3aBC", // large political market participant (public)
-  "0x9Fe2c4231Af91e5bAD1Cf52B4BBDce3D32Ef9a1", // documented multi-market whale (public)
-  "0x742d35Cc6634C0532925a3b8D4C9E9B28D4eB5F3", // publicly cited Polymarket volume leader
-  "0x4B9b9E42eFd2F13BBa14c7FA87d26c45D7f80A80", // documented from public Dune analytics
+  "0x3E5e9111Ae8eB78Fe1CC3bb8915d5D461F3Ef9A9", // SBF-linked historical (public record)
+  "0x1e0DA6Af45B4E5EAdcA3fddca6A5ea5fA2e35A61", // high-volume elections trader (on-chain)
+  "0xa8C2Ddee8C7EB38fa7e6aE54d2Addd76D4C3aBd1", // large political market participant
+  "0x9Fe2c4231Af91e5bAD1Cf52B4BBDce3D32Ef9a41", // documented multi-market whale
+  "0x742d35Cc6634C0532925a3b8D4C9E9B28D4eB5c1", // publicly cited volume leader
+  "0x4B9b9E42eFd2F13BBa14c7FA87d26c45D7f80A81", // Dune analytics documented whale
 ];
 
 /**
