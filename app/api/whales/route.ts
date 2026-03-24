@@ -70,11 +70,13 @@ async function discoverActiveWhales(): Promise<string[]> {
 
     if (qualifying.length >= 3) return qualifying;
 
-    // Not enough from API — merge with seeds (deduplicated)
-    const merged = [...new Set([...qualifying, ...SEED_WALLETS])].slice(0, MAX_PROFILE);
+    // Not enough from API — merge with seeds, normalize all to lowercase for deduplication
+    const merged = [
+      ...new Set([...qualifying, ...SEED_WALLETS.map((a) => a.toLowerCase())]),
+    ].slice(0, MAX_PROFILE);
     return merged;
   } catch {
-    return SEED_WALLETS.slice(0, MAX_PROFILE);
+    return SEED_WALLETS.map((a) => a.toLowerCase()).slice(0, MAX_PROFILE);
   }
 }
 

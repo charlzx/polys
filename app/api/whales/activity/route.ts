@@ -57,9 +57,12 @@ async function discoverActiveWhales(): Promise<string[]> {
 
     if (qualifying.length >= 3) return qualifying;
 
-    return [...new Set([...qualifying, ...SEED_WALLETS])].slice(0, 20);
+    // Normalize seeds to lowercase before deduplication (qualifying are already lowercase)
+    return [
+      ...new Set([...qualifying, ...SEED_WALLETS.map((a) => a.toLowerCase())]),
+    ].slice(0, 20);
   } catch {
-    return SEED_WALLETS;
+    return SEED_WALLETS.map((a) => a.toLowerCase());
   }
 }
 
