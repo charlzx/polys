@@ -180,11 +180,13 @@ export default function WhalesPage() {
   const { user } = useAuth();
   const isPro = user?.tier === "pro" || user?.tier === "premium";
 
-  const { data, isLoading, isError, dataUpdatedAt } = useWhalesLeaderboard(10);
+  const { data, isLoading, isError } = useWhalesLeaderboard(10);
 
   useEffect(() => {
-    if (dataUpdatedAt) setLastRefreshed(new Date(dataUpdatedAt));
-  }, [dataUpdatedAt]);
+    if (data?.refreshedAt) {
+      setLastRefreshed(new Date(data.refreshedAt));
+    }
+  }, [data?.refreshedAt]);
 
   const allWhales = data?.whales ?? [];
   const displayWhales = isPro ? allWhales : allWhales.slice(0, FREE_LIMIT);
