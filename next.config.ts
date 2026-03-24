@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
+const replitDomains = process.env.REPLIT_DOMAINS
+  ? process.env.REPLIT_DOMAINS.split(",").map((d) => d.trim())
+  : [];
+
 const nextConfig: NextConfig = {
+  allowedDevOrigins: replitDomains,
   images: {
     remotePatterns: [
       {
