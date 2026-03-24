@@ -18,10 +18,8 @@ export default function Icon() {
         width="30"
         height="30"
         viewBox="0 0 24 24"
-        fill="none"
-        stroke="#6366f1"
-        strokeWidth="2"
-        strokeLinejoin="round"
+        fill="#5b5fec"
+        stroke="none"
       >
         <polygon points="22,12 17,3.3 7,3.3 2,12 7,20.7 17,20.7" />
       </svg>
