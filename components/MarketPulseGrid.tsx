@@ -21,18 +21,32 @@ function getTileColor(change24h: number, yesOdds: number): string {
   return "bg-muted-foreground/30";
 }
 
-function formatVolume(volume: string | number | undefined): string {
-  if (volume === undefined || volume === null || volume === "") return "N/A";
-  const raw = typeof volume === "string" ? volume.replace(/[$,]/g, "") : String(volume);
-  const num = parseFloat(raw);
-  if (isNaN(num)) return String(volume);
+function rawVolume(market: TransformedMarket): number {
+  if (typeof market.volume24h === "number") return market.volume24h;
+  if (typeof market.volume === "string") {
+    const n = parseFloat(market.volume.replace(/[$,]/g, ""));
+    return isNaN(n) ? 0 : n;
+  }
+  return 0;
+}
+
+function formatVolume(market: TransformedMarket): string {
+  const num = rawVolume(market);
+  if (num === 0) return "N/A";
   if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `$${(num / 1_000).toFixed(1)}K`;
   return `$${num.toFixed(0)}`;
 }
 
 export function MarketPulseGrid({ markets }: MarketPulseGridProps) {
-  const top30 = useMemo(() => markets.slice(0, 30), [markets]);
+  const top30 = useMemo(
+    () =>
+      [...markets]
+        .sort((a, b) => rawVolume(b) - rawVolume(a))
+        .slice(0, 30),
+    [markets]
+  );
+
   const [pulsingIds, setPulsingIds] = useState<Set<string>>(new Set());
   const prevMarketsRef = useRef<Map<string, number>>(new Map());
 
@@ -63,7 +77,7 @@ export function MarketPulseGrid({ markets }: MarketPulseGridProps) {
   }
 
   return (
-    <div className="relative rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-4 overflow-hidden">
+    <div className="rounded-2xl border border-border bg-card/60 p-4">
       <div className="flex items-center gap-1.5 mb-3">
         <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
         <span className="text-caption text-muted-foreground font-medium uppercase tracking-wide">
@@ -73,24 +87,34 @@ export function MarketPulseGrid({ markets }: MarketPulseGridProps) {
           {top30.length} markets
         </span>
       </div>
-      <TooltipProvider>
+
+      <TooltipProvider delayDuration={0}>
         <div className="grid grid-cols-6 gap-1.5">
           {top30.map((market) => {
             const isPulsing = pulsingIds.has(market.id);
             const colorClass = getTileColor(market.change24h, market.yesOdds);
             const changePositive = market.change24h >= 0;
-            const volume = formatVolume(market.volume24h ?? market.volume);
+            const volume = formatVolume(market);
             return (
               <Tooltip key={market.id}>
                 <TooltipTrigger asChild>
                   <div
-                    className={`aspect-square rounded transition-all duration-300 cursor-default ${colorClass} ${
-                      isPulsing ? "opacity-100 scale-110" : "opacity-70 scale-100"
-                    }`}
-                    style={{ transition: "opacity 0.3s ease, transform 0.3s ease" }}
+                    className={[
+                      "aspect-square rounded cursor-pointer transition-all duration-300",
+                      colorClass,
+                      isPulsing
+                        ? "opacity-100 scale-105"
+                        : "opacity-70 hover:opacity-100 hover:scale-105",
+                    ].join(" ")}
                   />
                 </TooltipTrigger>
-                <TooltipContent className="max-w-[200px] space-y-1 p-2.5">
+                <TooltipContent
+                  side="top"
+                  sideOffset={6}
+                  avoidCollisions
+                  collisionPadding={8}
+                  className="max-w-[200px] space-y-1 p-2.5 z-50"
+                >
                   <p className="font-semibold text-xs leading-snug line-clamp-2">{market.name}</p>
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span className="text-muted-foreground">YES</span>
@@ -98,13 +122,8 @@ export function MarketPulseGrid({ markets }: MarketPulseGridProps) {
                   </div>
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span className="text-muted-foreground">24h</span>
-                    <span
-                      className={`font-medium ${
-                        changePositive ? "text-success" : "text-destructive"
-                      }`}
-                    >
-                      {changePositive ? "+" : ""}
-                      {market.change24h}%
+                    <span className={`font-medium ${changePositive ? "text-success" : "text-destructive"}`}>
+                      {changePositive ? "+" : ""}{market.change24h}%
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3 text-xs">
@@ -117,6 +136,7 @@ export function MarketPulseGrid({ markets }: MarketPulseGridProps) {
           })}
         </div>
       </TooltipProvider>
+
       <div className="flex items-center gap-4 mt-3">
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-sm bg-success/70" />
@@ -136,7 +156,10 @@ export function MarketPulseGrid({ markets }: MarketPulseGridProps) {
 }
 
 export function SparklineStrip({ markets }: MarketPulseGridProps) {
-  const top5 = useMemo(() => markets.slice(0, 5), [markets]);
+  const top5 = useMemo(
+    () => [...markets].sort((a, b) => rawVolume(b) - rawVolume(a)).slice(0, 5),
+    [markets]
+  );
 
   if (top5.length === 0) {
     return (
@@ -153,7 +176,7 @@ export function SparklineStrip({ markets }: MarketPulseGridProps) {
   const range = maxOdds - minOdds || 1;
 
   return (
-    <div className="rounded-xl border border-border bg-card/60 backdrop-blur-sm px-3 py-2">
+    <div className="rounded-xl border border-border bg-card/60 px-3 py-2">
       <div className="flex items-center gap-1.5 mb-2">
         <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
         <span className="text-caption text-muted-foreground font-medium uppercase tracking-wide">

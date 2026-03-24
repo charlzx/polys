@@ -104,16 +104,26 @@ interface LiveFeedProps {
   limit?: number;
   showHeader?: boolean;
   compact?: boolean;
+  columns?: 1 | 2 | 3;
   className?: string;
 }
+
+const COLUMN_CLASSES: Record<number, string> = {
+  1: "",
+  2: "grid md:grid-cols-2 gap-x-2",
+  3: "grid md:grid-cols-2 lg:grid-cols-3 gap-x-2",
+};
 
 export function LiveFeed({
   limit = 15,
   showHeader = true,
   compact = false,
+  columns = 1,
   className = "",
 }: LiveFeedProps) {
   const { events, isLoading } = useLiveFeed(limit);
+  const displayCount = compact ? 3 : limit;
+  const gridClass = COLUMN_CLASSES[columns] ?? "";
 
   return (
     <div className={className}>
@@ -130,8 +140,8 @@ export function LiveFeed({
       )}
 
       {isLoading ? (
-        <div className="space-y-2">
-          {[...Array(compact ? 3 : 5)].map((_, i) => (
+        <div className={gridClass || "space-y-2"}>
+          {[...Array(compact ? 3 : Math.min(limit, 6))].map((_, i) => (
             <div key={i} className="flex items-start gap-3 p-3">
               <Skeleton className="h-8 w-8 rounded-full shrink-0" />
               <div className="flex-1 space-y-1.5">
@@ -146,9 +156,9 @@ export function LiveFeed({
           No recent activity yet.
         </p>
       ) : (
-        <div className={`space-y-0.5 ${compact ? "" : "max-h-[400px] overflow-y-auto pr-1"}`}>
+        <div className={gridClass}>
           <AnimatePresence initial={false}>
-            {events.slice(0, compact ? 3 : limit).map((event) => (
+            {events.slice(0, displayCount).map((event) => (
               <FeedRow key={event.id} event={event} />
             ))}
           </AnimatePresence>

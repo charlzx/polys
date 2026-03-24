@@ -21,6 +21,12 @@ import {
   CaretRight,
   WarningCircle,
 } from "@phosphor-icons/react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AppHeader } from "@/components/AppHeader";
 import { useKalshiMarkets } from "@/hooks/useKalshiMarkets";
 import type { FlatKalshiMarket } from "@/services/kalshi";
@@ -76,72 +82,132 @@ function formatEndDate(iso: string): string {
 }
 
 function KalshiMarketCard({ market, index }: { market: FlatKalshiMarket; index: number }) {
+  const [open, setOpen] = useState(false);
   const yesPercent = Math.round(market.yesMid * 100);
   const noPercent = 100 - yesPercent;
+  const title = market.eventTitle || market.marketTitle;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.04 }}
-    >
-      <Card className="group hover:border-primary/30 transition-base h-full flex flex-col">
-        <CardContent className="p-4 flex flex-col flex-1">
-          {/* Category badge */}
-          <Badge variant="outline" className="text-caption mb-3 self-start">
-            {labelFor(market.eventCategory)}
-          </Badge>
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: index * 0.04 }}
+      >
+        <Card
+          className="group hover:border-primary/30 transition-base h-full flex flex-col cursor-pointer"
+          onClick={() => setOpen(true)}
+        >
+          <CardContent className="p-4 flex flex-col flex-1">
+            <Badge variant="outline" className="text-caption mb-3 self-start">
+              {labelFor(market.eventCategory)}
+            </Badge>
 
-          {/* Market title */}
-          <h3 className="text-small font-medium mb-3 line-clamp-2 flex-1 min-h-[2.5rem]">
-            {market.eventTitle || market.marketTitle}
-          </h3>
+            <h3 className="text-small font-medium mb-3 line-clamp-2 flex-1 min-h-[2.5rem] group-hover:text-primary transition-colors">
+              {title}
+            </h3>
 
-          {/* YES / NO odds */}
-          <div className="flex items-center gap-6 mb-3">
-            <div>
-              <div className="text-title font-bold text-success">{yesPercent}%</div>
-              <div className="text-caption text-muted-foreground">YES</div>
-            </div>
-            <div>
-              <div className="text-title font-bold text-destructive">{noPercent}%</div>
-              <div className="text-caption text-muted-foreground">NO</div>
-            </div>
-            <div className="ml-auto text-right">
-              <div className="text-small font-medium text-muted-foreground">
-                {formatVolume(market.volumeFp)}
+            <div className="flex items-center gap-6 mb-3">
+              <div>
+                <div className="text-title font-bold text-success">{yesPercent}%</div>
+                <div className="text-caption text-muted-foreground">YES</div>
               </div>
-              <div className="text-caption text-muted-foreground">Volume</div>
+              <div>
+                <div className="text-title font-bold text-destructive">{noPercent}%</div>
+                <div className="text-caption text-muted-foreground">NO</div>
+              </div>
+              <div className="ml-auto text-right">
+                <div className="text-small font-medium text-muted-foreground">
+                  {formatVolume(market.volumeFp)}
+                </div>
+                <div className="text-caption text-muted-foreground">Volume</div>
+              </div>
             </div>
-          </div>
 
-          {/* YES probability bar */}
-          <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-3">
-            <div
-              className="h-full bg-success rounded-full transition-all"
-              style={{ width: `${yesPercent}%` }}
-            />
-          </div>
+            <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-3">
+              <div
+                className="h-full bg-success rounded-full transition-all"
+                style={{ width: `${yesPercent}%` }}
+              />
+            </div>
 
-          {/* End date */}
-          <div className="text-caption text-muted-foreground mb-4">
-            Closes {formatEndDate(market.closeTime)}
-          </div>
+            <div className="text-caption text-muted-foreground">
+              Closes {formatEndDate(market.closeTime)}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
-          {/* External trade link */}
-          <a href={market.externalUrl} target="_blank" rel="noopener noreferrer" className="block mt-auto">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="w-full hover:bg-primary hover:text-primary-foreground active:scale-95 transition-all cursor-pointer"
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <Badge variant="outline" className="text-caption">
+                {labelFor(market.eventCategory)}
+              </Badge>
+            </div>
+            <DialogTitle className="text-left leading-snug">{title}</DialogTitle>
+            {market.marketTitle && market.eventTitle && market.marketTitle !== market.eventTitle && (
+              <p className="text-small text-muted-foreground text-left mt-1">{market.marketTitle}</p>
+            )}
+          </DialogHeader>
+
+          <div className="space-y-5 pt-1">
+            {/* Odds */}
+            <div className="flex items-stretch gap-3">
+              <div className="flex-1 rounded-lg border border-border p-3 text-center">
+                <div className="text-display font-bold text-success">{yesPercent}%</div>
+                <div className="text-caption text-muted-foreground mt-0.5">YES</div>
+              </div>
+              <div className="flex-1 rounded-lg border border-border p-3 text-center">
+                <div className="text-display font-bold text-destructive">{noPercent}%</div>
+                <div className="text-caption text-muted-foreground mt-0.5">NO</div>
+              </div>
+            </div>
+
+            {/* Probability bar */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-caption text-muted-foreground">
+                <span>YES probability</span>
+                <span>{yesPercent}%</span>
+              </div>
+              <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-success rounded-full transition-all"
+                  style={{ width: `${yesPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-border p-3">
+                <div className="text-caption text-muted-foreground mb-1">Volume</div>
+                <div className="text-small font-semibold">{formatVolume(market.volumeFp)}</div>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <div className="text-caption text-muted-foreground mb-1">Closes</div>
+                <div className="text-small font-semibold">{formatEndDate(market.closeTime)}</div>
+              </div>
+            </div>
+
+            {/* Trade CTA */}
+            <a
+              href={market.externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="block"
             >
-              Trade on Kalshi
-              <ArrowUpRight weight="bold" className="ml-2 h-4 w-4" />
-            </Button>
-          </a>
-        </CardContent>
-      </Card>
-    </motion.div>
+              <Button className="w-full" size="lg">
+                Trade on Kalshi
+                <ArrowUpRight weight="bold" className="ml-2 h-4 w-4" />
+              </Button>
+            </a>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

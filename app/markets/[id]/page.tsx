@@ -29,7 +29,25 @@ import { useMarketSummary, type MarketSummary } from "@/services/ai";
 import { useSingleMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import type { LiveTrade } from "@/hooks/useMarketWebSocket";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useAuth } from "@/hooks/useAuth";
 import { useWatchlist } from "@/hooks/useWatchlist";
+import { useAlerts, type CreateAlertInput } from "@/hooks/useAlerts";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useMarketNews, type GuardianArticle, type RedditPost } from "@/hooks/useMarketNews";
 import { AppHeader } from "@/components/AppHeader";
 import {
@@ -371,7 +389,50 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
   const { data: market, isLoading, error } = useMarket(id);
   const [timeframe, setTimeframe] = useState("30D");
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
+  const { user } = useAuth();
   const { isWatched, toggleWatchlist } = useWatchlist();
+  const { createAlert } = useAlerts(user?.id);
+
+  // Alert dialog state
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertName, setAlertName] = useState("");
+  const [alertType, setAlertType] = useState<CreateAlertInput["alert_type"]>("odds");
+  const [alertThreshold, setAlertThreshold] = useState("10");
+  const [alertEmail, setAlertEmail] = useState(true);
+  const [alertSubmitting, setAlertSubmitting] = useState(false);
+  const [alertError, setAlertError] = useState<string | null>(null);
+  const [alertSuccess, setAlertSuccess] = useState(false);
+
+  function openAlertDialog() {
+    setAlertName(market?.name ? `Alert: ${market.name.slice(0, 40)}` : "New Alert");
+    setAlertType("odds");
+    setAlertThreshold("10");
+    setAlertEmail(true);
+    setAlertError(null);
+    setAlertSuccess(false);
+    setAlertOpen(true);
+  }
+
+  async function handleCreateAlert(e: React.FormEvent) {
+    e.preventDefault();
+    if (!market) return;
+    setAlertSubmitting(true);
+    setAlertError(null);
+    const err = await createAlert({
+      name: alertName,
+      alert_type: alertType,
+      market_name: market.name,
+      threshold: parseFloat(alertThreshold) || 10,
+      delivery_email: alertEmail,
+    });
+    setAlertSubmitting(false);
+    if (err) {
+      setAlertError(err);
+    } else {
+      setAlertSuccess(true);
+      setTimeout(() => setAlertOpen(false), 1800);
+    }
+  }
 
   // Live WebSocket data (real CLOB connection when yesTokenId available)
   const { currentOdds, lastUpdate, volatility, momentum, liveOrderBook, liveTrades, feedError } = useSingleMarketWebSocket(
@@ -570,7 +631,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   </div>
                   <div className="flex gap-2 flex-wrap">
-                    <Button>
+                    <Button onClick={openAlertDialog}>
                       <Bell className="h-4 w-4 mr-2" />
                       Create Alert
                     </Button>
@@ -836,6 +897,120 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
       </div>
+
+      {/* Create Alert Dialog */}
+      <Dialog open={alertOpen} onOpenChange={setAlertOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-4 w-4" />
+              Create Alert
+            </DialogTitle>
+            <DialogDescription>
+              Get notified when this market changes.
+            </DialogDescription>
+          </DialogHeader>
+
+          {alertSuccess ? (
+            <div className="py-8 text-center space-y-2">
+              <div className="text-success text-title font-semibold">Alert created!</div>
+              <p className="text-small text-muted-foreground">
+                You&apos;ll be notified when the condition is met.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleCreateAlert} className="space-y-4 pt-1">
+              {/* Market (read-only) */}
+              <div className="space-y-1.5">
+                <Label className="text-small">Market</Label>
+                <p className="text-small text-muted-foreground line-clamp-2 rounded-md border border-border px-3 py-2 bg-secondary/40">
+                  {market?.name}
+                </p>
+              </div>
+
+              {/* Alert name */}
+              <div className="space-y-1.5">
+                <Label htmlFor="alert-name" className="text-small">Alert Name</Label>
+                <Input
+                  id="alert-name"
+                  value={alertName}
+                  onChange={(e) => setAlertName(e.target.value)}
+                  placeholder="E.g. YES odds spike"
+                  required
+                  maxLength={80}
+                />
+              </div>
+
+              {/* Alert type */}
+              <div className="space-y-1.5">
+                <Label className="text-small">Alert Type</Label>
+                <Select value={alertType} onValueChange={(v) => setAlertType(v as CreateAlertInput["alert_type"])}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="odds">Odds Movement</SelectItem>
+                    <SelectItem value="volume">Volume Spike</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Threshold */}
+              <div className="space-y-1.5">
+                <Label htmlFor="alert-threshold" className="text-small">
+                  {alertType === "odds" ? "Threshold (%)" : "Volume threshold ($k)"}
+                </Label>
+                <Input
+                  id="alert-threshold"
+                  type="number"
+                  min="1"
+                  max={alertType === "odds" ? "99" : "10000"}
+                  value={alertThreshold}
+                  onChange={(e) => setAlertThreshold(e.target.value)}
+                  required
+                />
+                <p className="text-caption text-muted-foreground">
+                  {alertType === "odds"
+                    ? `Notify when YES odds drop below ${alertThreshold || "—"}%`
+                    : `Notify when 24h volume exceeds $${alertThreshold || "—"}k`}
+                </p>
+              </div>
+
+              {/* Email delivery */}
+              <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  id="alert-email"
+                  checked={alertEmail}
+                  onChange={(e) => setAlertEmail(e.target.checked)}
+                  className="h-4 w-4 accent-primary cursor-pointer"
+                />
+                <Label htmlFor="alert-email" className="text-small cursor-pointer">
+                  Send email notifications
+                </Label>
+              </div>
+
+              {alertError && (
+                <p className="text-caption text-destructive">{alertError}</p>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setAlertOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" className="flex-1" disabled={alertSubmitting}>
+                  {alertSubmitting ? "Creating…" : "Create Alert"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
       </main>
     </div>
   );

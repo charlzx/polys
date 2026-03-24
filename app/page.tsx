@@ -398,19 +398,6 @@ export default function LandingPage() {
                 <SparklineStrip markets={liveMarkets} />
               </motion.div>
 
-              {/* Happening Now strip */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={heroInView ? { opacity: 1, y: 0 } : {}}
-                transition={{ duration: 0.6, delay: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
-                className="p-4 rounded-xl border border-border bg-card/60 backdrop-blur-sm max-w-md"
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <Lightning weight="fill" className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-caption font-semibold text-muted-foreground uppercase tracking-wide">Happening Now</span>
-                </div>
-                <LiveFeed limit={3} showHeader={false} compact={true} />
-              </motion.div>
             </div>
 
             {/* Right column — Market Pulse Grid (desktop only) */}
@@ -423,6 +410,31 @@ export default function LandingPage() {
               <MarketPulseGrid markets={liveMarkets} />
             </motion.div>
           </div>
+        </div>
+      </section>
+
+      {/* Happening Now — full-width live activity section */}
+      <section className="border-b border-border bg-background">
+        <div className="container py-8 md:py-10">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="flex items-center gap-2 mb-6"
+          >
+            <Lightning weight="fill" className="h-4 w-4 text-primary" />
+            <h2 className="text-subtitle font-semibold">Happening Now</h2>
+            <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse ml-1" />
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+          >
+            <LiveFeed limit={6} showHeader={false} compact={false} columns={3} />
+          </motion.div>
         </div>
       </section>
 
