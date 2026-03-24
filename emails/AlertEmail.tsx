@@ -303,5 +303,5 @@ const footer: React.CSSProperties = {
 };
 
 const footerLink: React.CSSProperties = {
-  color: "#4b5563",
+  color: "#6b7280",
 };
