@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { Providers } from "../components/providers";
 import { Toaster } from "@/components/ui/toaster";
+import { CookieBanner } from "@/components/CookieBanner";
 
 const geist = Geist({
   subsets: ["latin"],
@@ -28,6 +29,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <Toaster />
+          <CookieBanner />
         </Providers>
       </body>
     </html>
