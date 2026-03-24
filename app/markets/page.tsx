@@ -599,9 +599,7 @@ export default function MarketsPage() {
 
                     if (isKalshi) {
                       return (
-                        <div key={market.id} className="cursor-pointer" onClick={() => {}}>
-                          <KalshiListRow market={market} isWatched={isWatched(market.id)} onToggleWatch={() => handleToggleWatch(market)} />
-                        </div>
+                        <KalshiListRow key={market.id} market={market} isWatched={isWatched(market.id)} onToggleWatch={() => handleToggleWatch(market)} />
                       );
                     }
 
