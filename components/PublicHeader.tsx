@@ -55,8 +55,7 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
         <div className="flex h-14 items-center justify-between gap-4">
           {/* Logo */}
           <Link href="/" className="flex items-center shrink-0">
-            <Logo size="sm" showWordmark className="hidden sm:inline-flex" />
-            <Logo size="sm" showWordmark={false} className="sm:hidden" />
+            <Logo size="sm" showWordmark />
           </Link>
 
           {/* Nav Links */}
