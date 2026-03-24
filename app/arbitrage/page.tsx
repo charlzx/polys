@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { AppHeader } from "@/components/AppHeader";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -12,12 +13,40 @@ import {
   CaretDown,
   CaretUp,
   ArrowsCounterClockwise,
+  ArrowUpRight,
+  Copy,
+  Check,
 } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { ArbitrageOpportunity } from "@/services/arbitrage";
+
+function useCopyPosition() {
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  const copy = useCallback((opp: ArbitrageOpportunity) => {
+    const text = [
+      `Market: ${opp.market}`,
+      ``,
+      `Leg 1 — Buy YES on ${opp.platform2} at ${opp.odds2}¢: $${opp.yesCost.toLocaleString()}`,
+      `Leg 2 — Buy NO on ${opp.platform1} at ${100 - opp.odds1}¢: $${opp.noCost.toLocaleString()}`,
+      ``,
+      `Capital deployed: $${opp.capital.toLocaleString()}`,
+      `Estimated payout: $${opp.expectedReturn.toLocaleString()}`,
+      `Profit: ${opp.profit}%`,
+    ].join("\n");
+
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(opp.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  }, []);
+
+  return { copy, copiedId };
+}
 
 export default function ArbitragePage() {
   const { user } = useAuth();
@@ -28,6 +57,7 @@ export default function ArbitragePage() {
     polymarket: true,
     kalshi: true,
   });
+  const { copy, copiedId } = useCopyPosition();
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
 
   const { data, isLoading, isError, dataUpdatedAt, refetch } = useArbitrage();
@@ -300,21 +330,49 @@ export default function ArbitragePage() {
                                       </div>
                                       <div className="space-y-1 text-caption">
                                         <div>Capital deployed: ${opp.capital.toLocaleString()}</div>
-                                        <div>Guaranteed payout: ${opp.expectedReturn.toLocaleString()}</div>
+                                        <div>Estimated payout: ${opp.expectedReturn.toLocaleString()}</div>
                                         <div className="text-success font-medium">
-                                          Locked-in profit: $
+                                          Potential profit: $
                                           {(opp.expectedReturn - opp.capital).toLocaleString()} ({opp.profit}%)
                                         </div>
                                       </div>
                                     </div>
                                   </div>
-                                  <div className="flex gap-2">
-                                    <Button size="sm" variant="secondary">
-                                      Copy Positions
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() => copy(opp)}
+                                      className="gap-1.5"
+                                    >
+                                      {copiedId === opp.id ? (
+                                        <>
+                                          <Check weight="bold" className="h-3.5 w-3.5 text-success" />
+                                          Copied!
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy weight="regular" className="h-3.5 w-3.5" />
+                                          Copy Positions
+                                        </>
+                                      )}
                                     </Button>
-                                    <Button size="sm" variant="outline">
-                                      Mark Executed
-                                    </Button>
+                                    {opp.polyMarketId && (
+                                      <Button size="sm" variant="outline" asChild className="gap-1.5">
+                                        <Link href={`/markets/${opp.polyMarketId}`}>
+                                          View on Polymarket
+                                          <ArrowUpRight weight="bold" className="h-3.5 w-3.5" />
+                                        </Link>
+                                      </Button>
+                                    )}
+                                    {opp.kalshiExternalUrl && (
+                                      <Button size="sm" variant="outline" asChild className="gap-1.5">
+                                        <a href={opp.kalshiExternalUrl} target="_blank" rel="noopener noreferrer">
+                                          Trade on Kalshi
+                                          <ArrowUpRight weight="bold" className="h-3.5 w-3.5" />
+                                        </a>
+                                      </Button>
+                                    )}
                                   </div>
                                 </div>
                               </motion.div>
@@ -366,13 +424,16 @@ export default function ArbitragePage() {
                     </li>
                     <li className="flex gap-2">
                       <span className="font-semibold text-foreground">2.</span>
-                      Detect price discrepancies that guarantee profit
+                      Detect price discrepancies between platforms
                     </li>
                     <li className="flex gap-2">
                       <span className="font-semibold text-foreground">3.</span>
-                      Execute on both platforms to lock in returns
+                      Execute on both platforms to capture the spread
                     </li>
                   </ol>
+                  <p className="text-caption text-muted-foreground mt-4 pt-3 border-t border-border">
+                    Actual returns may vary due to order book depth and slippage. Always verify prices before executing.
+                  </p>
                 </CardContent>
               </Card>
             </motion.div>

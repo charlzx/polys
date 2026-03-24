@@ -8,6 +8,7 @@ export interface ArbitrageOpportunity {
   id: number;
   market: string;
   polyMarketId?: string; // Polymarket market ID for direct link
+  kalshiExternalUrl?: string; // Kalshi canonical URL for direct link
   platform1: string; // higher YES price (overpriced side — buy NO here)
   platform2: string; // lower YES price (underpriced side — buy YES here)
   odds1: number; // YES price on platform1 as percentage
@@ -16,7 +17,7 @@ export interface ArbitrageOpportunity {
   capital: number; // total capital deployed (YES + NO spend)
   yesCost: number; // dollars spent buying YES on platform2
   noCost: number; // dollars spent buying NO on platform1
-  expectedReturn: number; // guaranteed payout = capital + profit dollars
+  expectedReturn: number; // estimated payout = capital + profit dollars
   timeDetected: string; // relative time since first seen
   status: "active" | "fading" | "expired";
 }
@@ -206,6 +207,7 @@ export function detectArbitrage(
       id: opportunities.length + 1,
       market: kalshi.eventTitle,
       polyMarketId: bestPoly.id,
+      kalshiExternalUrl: kalshi.externalUrl,
       platform1,
       platform2,
       odds1,
