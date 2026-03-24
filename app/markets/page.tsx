@@ -65,7 +65,17 @@ function SourceBadge({ source }: { source: MarketSource }) {
   );
 }
 
+function formatEndDate(dateStr: string): string {
+  if (!dateStr) return "";
+  try {
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
 function KalshiDetailDialog({ market, open, onClose }: { market: UnifiedMarket; open: boolean; onClose: () => void }) {
+  const formattedEnd = formatEndDate(market.endDate);
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
@@ -87,14 +97,22 @@ function KalshiDetailDialog({ market, open, onClose }: { market: UnifiedMarket; 
               <div className="text-title font-bold text-destructive">{market.noOdds}%</div>
             </div>
           </div>
-          <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
-            <span>Volume</span>
-            <span className="font-medium">{market.volume}</span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+              <span>Volume</span>
+              <span className="font-medium text-foreground">{market.volume}</span>
+            </div>
+            {formattedEnd && (
+              <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+                <span>Closes</span>
+                <span className="font-medium text-foreground">{formattedEnd}</span>
+              </div>
+            )}
           </div>
           {market.externalUrl && (
             <Button variant="secondary" size="sm" className="w-full" asChild>
               <a href={market.externalUrl} target="_blank" rel="noopener noreferrer">
-                View on Kalshi
+                Trade on Kalshi
                 <ArrowUpRight weight="bold" className="ml-2 h-4 w-4" />
               </a>
             </Button>

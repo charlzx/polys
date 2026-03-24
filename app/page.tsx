@@ -103,8 +103,18 @@ function PredictionsTicker({ markets }: { markets: UnifiedMarket[] }) {
   );
 }
 
+function formatEndDate(dateStr: string): string {
+  if (!dateStr) return "";
+  try {
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
 // Homepage Kalshi detail dialog
 function HomepageKalshiDialog({ market, open, onClose }: { market: UnifiedMarket; open: boolean; onClose: () => void }) {
+  const formattedEnd = formatEndDate(market.endDate);
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
@@ -126,14 +136,22 @@ function HomepageKalshiDialog({ market, open, onClose }: { market: UnifiedMarket
               <div className="text-title font-bold text-destructive">{market.noOdds}%</div>
             </div>
           </div>
-          <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
-            <span>Volume</span>
-            <span className="font-medium">{market.volume}</span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+              <span>Volume</span>
+              <span className="font-medium text-foreground">{market.volume}</span>
+            </div>
+            {formattedEnd && (
+              <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+                <span>Closes</span>
+                <span className="font-medium text-foreground">{formattedEnd}</span>
+              </div>
+            )}
           </div>
           {market.externalUrl && (
             <a href={market.externalUrl} target="_blank" rel="noopener noreferrer" className="block">
               <button className="w-full py-2 px-4 rounded-md bg-secondary text-secondary-foreground text-small font-medium hover:bg-secondary/80 transition-colors">
-                View on Kalshi
+                Trade on Kalshi →
               </button>
             </a>
           )}
