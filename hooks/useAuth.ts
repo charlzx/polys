@@ -23,19 +23,43 @@ export interface Profile {
   weekly_summary: boolean | null;
 }
 
-// Fetch profile row; returns null if table doesn't exist yet or row not found
+// Fetch profile row; attempts upsert when row is missing; returns null if table doesn't exist
 async function fetchProfile(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  meta?: Record<string, unknown>
 ): Promise<Profile | null> {
+  const SELECT_COLS =
+    "id, name, tier, avatar_url, timezone, email_alerts_enabled, portfolio_daily_digest, weekly_summary";
+
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, name, tier, avatar_url, timezone, email_alerts_enabled, portfolio_daily_digest, weekly_summary")
+    .select(SELECT_COLS)
     .eq("id", userId)
     .single();
 
-  if (error) return null;
-  return data as Profile;
+  if (!error) return data as Profile;
+
+  // PGRST116 = "Row not found" — row missing but table exists → upsert a seed row
+  if (error.code === "PGRST116") {
+    const { data: upserted } = await supabase
+      .from("profiles")
+      .upsert({
+        id: userId,
+        name:
+          (meta?.name as string) ??
+          (meta?.full_name as string) ??
+          null,
+        tier: "free",
+        avatar_url: (meta?.avatar_url as string) ?? null,
+      })
+      .select(SELECT_COLS)
+      .single();
+    return upserted as Profile | null;
+  }
+
+  // Any other error (e.g. table doesn't exist) — return null, caller degrades gracefully
+  return null;
 }
 
 function buildUser(session: Session, profile: Profile | null): User {
@@ -71,7 +95,7 @@ export function useAuth() {
           setIsLoading(false);
           return;
         }
-        const profile = await fetchProfile(supabase, session.user.id);
+        const profile = await fetchProfile(supabase, session.user.id, session.user.user_metadata);
         setUser(buildUser(session, profile));
       } catch {
         if (session) {

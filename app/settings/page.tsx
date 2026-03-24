@@ -160,6 +160,9 @@ function SettingsContent() {
   const [density, setDensity] = useLocalStorage<"comfortable" | "compact">("polys-density", "comfortable");
   const [fontSize, setFontSize] = useLocalStorage<"normal" | "large">("polys-font-size", "normal");
 
+  // True when DB migrations haven't been run yet
+  const [migrationNeeded, setMigrationNeeded] = useState(false);
+
   useEffect(() => {
     if (!user) return;
     setProfileName(user.name || "");
@@ -168,11 +171,22 @@ function SettingsContent() {
 
   const loadProfilePrefs = useCallback(async () => {
     if (!user?.id) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .select("timezone, email_alerts_enabled, portfolio_daily_digest, weekly_summary")
       .eq("id", user.id)
       .single();
+
+    if (error) {
+      // 42P01 = undefined_table; message check covers PostgREST wrapping
+      const isMissing =
+        error.code === "42P01" ||
+        (error.message?.toLowerCase?.().includes("relation") &&
+          error.message?.toLowerCase?.().includes("does not exist"));
+      if (isMissing) setMigrationNeeded(true);
+      return;
+    }
+
     if (data) {
       if (data.timezone) setProfileTimezone(data.timezone);
       if (data.email_alerts_enabled !== null) setNotifEmailAlerts(data.email_alerts_enabled ?? true);
@@ -187,13 +201,19 @@ function SettingsContent() {
 
   const handleSaveProfile = async () => {
     if (!user?.id) return;
+    if (migrationNeeded) {
+      toast({ title: "Database not set up", description: "Run the migration SQL first (see the banner above).", variant: "destructive" });
+      return;
+    }
     setIsSavingProfile(true);
     const { error } = await supabase
       .from("profiles")
       .update({ name: profileName, timezone: profileTimezone })
       .eq("id", user.id);
     if (error) {
-      toast({ title: "Error saving profile", description: error.message, variant: "destructive" });
+      const isTable = error.code === "42P01" || error.message?.includes("does not exist");
+      if (isTable) setMigrationNeeded(true);
+      toast({ title: isTable ? "Database not set up" : "Error saving profile", description: isTable ? "Run the migration SQL first (see the banner above)." : error.message, variant: "destructive" });
     } else {
       toast({ title: "Profile saved", description: "Your display name and timezone have been updated." });
     }
@@ -215,10 +235,18 @@ function SettingsContent() {
         .eq("id", user.id);
       if (error) {
         setters[field](!value);
-        toast({ title: "Save failed", description: "Could not update preference.", variant: "destructive" });
+        const isTable = error.code === "42P01" || error.message?.includes("does not exist");
+        if (isTable) setMigrationNeeded(true);
+        toast({
+          title: isTable ? "Database not set up" : "Save failed",
+          description: isTable
+            ? "Run the migration SQL first — see the banner at the top."
+            : "Could not update preference.",
+          variant: "destructive",
+        });
       }
     },
-    [supabase, user?.id, toast]
+    [supabase, user?.id, toast, setMigrationNeeded]
   );
 
   const handleSendPasswordReset = async () => {
@@ -719,6 +747,38 @@ function SettingsContent() {
               Manage your account preferences and configuration
             </p>
           </div>
+
+          {/* ── Migration required banner ── */}
+          {migrationNeeded && (
+            <div className="mb-6 p-4 rounded-xl border border-amber-500/40 bg-amber-50 dark:bg-amber-950/20 flex flex-col sm:flex-row gap-4">
+              <Warning weight="fill" className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-2">
+                <p className="text-small font-semibold text-amber-900 dark:text-amber-300">
+                  Database setup required
+                </p>
+                <p className="text-caption text-amber-800 dark:text-amber-400">
+                  Your Supabase database tables haven&apos;t been created yet. Profile editing and
+                  notification preferences won&apos;t save until the migration has been run.
+                </p>
+                <p className="text-caption text-amber-800 dark:text-amber-400">
+                  Open{" "}
+                  <a
+                    href="https://supabase.com/dashboard/project/_/sql/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline font-medium"
+                  >
+                    Supabase SQL Editor
+                  </a>
+                  , paste the contents of{" "}
+                  <code className="font-mono bg-amber-200/50 dark:bg-amber-900/40 px-1 rounded text-[11px]">
+                    supabase/migrations/run_all.sql
+                  </code>{" "}
+                  from your project files, and click Run. This is a one-time setup.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-6 lg:gap-8 items-start">
             {/* ── Desktop sidebar nav ── */}
