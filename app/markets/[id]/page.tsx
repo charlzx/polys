@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use, useMemo } from "react";
+import { useState, use, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,34 @@ import {
   Broadcast,
   ChartBar,
   ChartLine,
+  Newspaper,
+  ArrowUpRight,
 } from "@phosphor-icons/react";
-import { useMarket } from "@/services/polymarket";
+import { useMarket, usePriceHistory, useOrderbook } from "@/services/polymarket";
+import { useMarketSummary, type MarketSummary } from "@/services/ai";
+import { useSingleMarketWebSocket } from "@/hooks/useMarketWebSocket";
+import type { LiveTrade } from "@/hooks/useMarketWebSocket";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useAuth } from "@/hooks/useAuth";
+import { useWatchlist } from "@/hooks/useWatchlist";
+import { useAlerts, type CreateAlertInput } from "@/hooks/useAlerts";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useMarketNews, type GuardianArticle, type RedditPost } from "@/hooks/useMarketNews";
 import { AppHeader } from "@/components/AppHeader";
 import {
   XAxis,
@@ -33,97 +58,7 @@ import {
   ResponsiveContainer,
   Area,
   AreaChart,
-  BarChart,
-  Bar,
-  Cell,
 } from "recharts";
-
-// Generate realistic historical data with trend patterns
-function generateHistoricalData(currentYes: number, days: number) {
-  const data = [];
-  const now = new Date();
-  
-  let yes = currentYes + (Math.random() - 0.5) * 30;
-  yes = Math.max(10, Math.min(90, yes));
-  
-  const trendStrength = (currentYes - yes) / days;
-  
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    
-    const trend = trendStrength;
-    const noise = (Math.random() - 0.5) * 4;
-    const meanReversion = (50 - yes) * 0.02;
-    
-    yes += trend + noise + meanReversion;
-    yes = Math.max(5, Math.min(95, yes));
-    
-    const dayVolatility = 2 + Math.random() * 3;
-    const high = Math.min(95, yes + dayVolatility);
-    const low = Math.max(5, yes - dayVolatility);
-    
-    data.push({
-      date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      yes: Math.round(yes * 10) / 10,
-      no: Math.round((100 - yes) * 10) / 10,
-      high: Math.round(high * 10) / 10,
-      low: Math.round(low * 10) / 10,
-      volume: Math.floor(50000 + Math.random() * 200000),
-    });
-  }
-
-  if (data.length > 0) {
-    data[data.length - 1].yes = currentYes;
-    data[data.length - 1].no = 100 - currentYes;
-  }
-
-  return data;
-}
-
-// Generate order book data
-function generateOrderBook(currentYes: number) {
-  const bids: { price: number; size: number; total: number }[] = [];
-  const asks: { price: number; size: number; total: number }[] = [];
-  
-  const yesPrice = currentYes / 100;
-  let bidTotal = 0;
-  let askTotal = 0;
-  
-  for (let i = 0; i < 8; i++) {
-    const price = Math.max(0.01, yesPrice - 0.01 - i * 0.02);
-    const size = Math.floor(500 + Math.random() * 2000 * (1 + i * 0.3));
-    bidTotal += size;
-    bids.push({ price: Math.round(price * 100) / 100, size, total: bidTotal });
-  }
-  
-  for (let i = 0; i < 8; i++) {
-    const price = Math.min(0.99, yesPrice + 0.01 + i * 0.02);
-    const size = Math.floor(500 + Math.random() * 2000 * (1 + i * 0.3));
-    askTotal += size;
-    asks.push({ price: Math.round(price * 100) / 100, size, total: askTotal });
-  }
-  
-  return { bids, asks: asks.reverse(), maxTotal: Math.max(bidTotal, askTotal) };
-}
-
-// Generate recent trades
-function generateMockTrades() {
-  const sides = ["Buy YES", "Sell YES", "Buy NO", "Sell NO"];
-  const now = new Date();
-  
-  return [...Array(12)].map((_, i) => ({
-    id: i + 1,
-    time: new Date(now.getTime() - i * 8 * 60000).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    side: sides[Math.floor(Math.random() * sides.length)],
-    price: (0.30 + Math.random() * 0.50).toFixed(2),
-    quantity: Math.floor(Math.random() * 800) + 100,
-    total: (50 + Math.random() * 300).toFixed(2),
-  }));
-}
 
 // Volatility indicator component
 function VolatilityIndicator({ level, momentum }: { level: 'low' | 'medium' | 'high'; momentum: 'bullish' | 'bearish' | 'neutral' }) {
@@ -159,6 +94,7 @@ function OrderBookChart({ bids, asks, maxTotal }: {
   asks: { price: number; size: number; total: number }[];
   maxTotal: number;
 }) {
+  const safeMax = maxTotal > 0 ? maxTotal : 1; // avoid division-by-zero
   const depthData = [
     ...bids.map(b => ({ price: b.price, bidDepth: b.total, askDepth: 0 })).reverse(),
     ...asks.map(a => ({ price: a.price, bidDepth: 0, askDepth: a.total })),
@@ -188,7 +124,7 @@ function OrderBookChart({ bids, asks, maxTotal }: {
               tickLine={false}
               axisLine={false}
             />
-            <YAxis hide domain={[0, maxTotal * 1.1]} />
+            <YAxis hide domain={[0, safeMax * 1.1]} />
             <Area type="stepAfter" dataKey="bidDepth" stroke="oklch(45% 0.15 145)" fill="url(#bidGradient)" />
             <Area type="stepAfter" dataKey="askDepth" stroke="oklch(58% 0.22 25)" fill="url(#askGradient)" />
           </AreaChart>
@@ -207,7 +143,7 @@ function OrderBookChart({ bids, asks, maxTotal }: {
             <div key={i} className="flex justify-between px-2 py-0.5 relative">
               <div 
                 className="absolute inset-y-0 right-0 bg-success/10" 
-                style={{ width: `${(bid.total / maxTotal) * 100}%` }} 
+                style={{ width: `${(bid.total / safeMax) * 100}%` }} 
               />
               <span className="text-success relative z-10">{bid.price.toFixed(2)}</span>
               <span className="relative z-10 font-mono">{bid.size.toLocaleString()}</span>
@@ -225,7 +161,7 @@ function OrderBookChart({ bids, asks, maxTotal }: {
             <div key={i} className="flex justify-between px-2 py-0.5 relative">
               <div 
                 className="absolute inset-y-0 left-0 bg-destructive/10" 
-                style={{ width: `${(ask.total / maxTotal) * 100}%` }} 
+                style={{ width: `${(ask.total / safeMax) * 100}%` }} 
               />
               <span className="text-destructive relative z-10">{ask.price.toFixed(2)}</span>
               <span className="relative z-10 font-mono">{ask.size.toLocaleString()}</span>
@@ -237,50 +173,312 @@ function OrderBookChart({ bids, asks, maxTotal }: {
   );
 }
 
-// Local storage for watchlist
-function getWatchlist(): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem("polypro-watchlist") || "[]");
-  } catch {
-    return [];
-  }
+// AI Analysis collapsible panel
+function AiAnalysisPanel({
+  isLoading,
+  summary,
+  error,
+}: {
+  isLoading: boolean;
+  summary: MarketSummary | null;
+  error: string | null;
+}) {
+  const [open, setOpen] = useState(true);
+
+  const sentimentColor: Record<string, string> = {
+    "Bullish": "text-success",
+    "Highly Bullish": "text-success",
+    "Bearish": "text-destructive",
+    "Highly Bearish": "text-destructive",
+    "Neutral": "text-muted-foreground",
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        className="flex flex-row items-center justify-between pb-2 cursor-pointer"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <div className="flex items-center gap-2">
+          <Sparkle className="h-4 w-4 text-primary" weight="fill" />
+          <CardTitle className="text-subtitle">AI Analysis</CardTitle>
+        </div>
+        <ChartLine
+          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-0" : "-rotate-90"}`}
+        />
+      </CardHeader>
+
+      {open && (
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-5/6" />
+              <Skeleton className="h-3 w-4/5" />
+              <Skeleton className="h-3 w-full" />
+            </div>
+          ) : error ? (
+            <p className="text-small text-muted-foreground">AI analysis unavailable.</p>
+          ) : summary ? (
+            <>
+              <div>
+                <div className="text-caption text-muted-foreground mb-1">Sentiment</div>
+                <div className={`text-small font-semibold ${sentimentColor[summary.sentiment] ?? ""}`}>
+                  {summary.sentiment}
+                </div>
+              </div>
+              <div>
+                <div className="text-caption text-muted-foreground mb-1">Price Movement</div>
+                <p className="text-small">{summary.priceMovementInsight}</p>
+              </div>
+              <div>
+                <div className="text-caption text-muted-foreground mb-1">Risk Factors</div>
+                <ul className="space-y-1">
+                  {summary.riskFactors.map((r, i) => (
+                    <li key={i} className="text-small text-muted-foreground flex gap-2">
+                      <span className="text-destructive mt-0.5">•</span>
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="border-t border-border pt-3">
+                <div className="text-caption text-muted-foreground mb-1">Calibrated Assessment</div>
+                <p className="text-small">{summary.probabilityAssessment}</p>
+              </div>
+            </>
+          ) : null}
+        </CardContent>
+      )}
+    </Card>
+  );
 }
 
-function toggleWatchlist(marketId: string): string[] {
-  const current = getWatchlist();
-  const updated = current.includes(marketId)
-    ? current.filter((id) => id !== marketId)
-    : [...current, marketId];
-  localStorage.setItem("polypro-watchlist", JSON.stringify(updated));
-  return updated;
+// Related news coverage section
+function RelatedCoverage({
+  guardian,
+  reddit,
+  isLoading,
+}: {
+  guardian: GuardianArticle[];
+  reddit: RedditPost[];
+  isLoading: boolean;
+}) {
+  const hasResults = guardian.length > 0 || reddit.length > 0;
+
+  if (!isLoading && !hasResults) return null;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 pb-3">
+        <Newspaper className="h-4 w-4 text-primary" />
+        <CardTitle className="text-subtitle">Related Coverage</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex gap-3">
+                <Skeleton className="h-12 w-12 rounded flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-3/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {guardian.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-caption text-muted-foreground font-medium uppercase tracking-wide">
+                  News
+                </div>
+                <div className="space-y-2">
+                  {guardian.map((article, i) => (
+                    <a
+                      key={i}
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex gap-3 group hover:bg-secondary/50 rounded-md p-2 -mx-2 transition-colors"
+                    >
+                      {article.thumbnail ? (
+                        <img
+                          src={article.thumbnail}
+                          alt=""
+                          className="h-12 w-12 rounded object-cover flex-shrink-0 bg-secondary"
+                        />
+                      ) : (
+                        <div className="h-12 w-12 rounded bg-secondary flex items-center justify-center flex-shrink-0">
+                          <Newspaper className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-small font-medium line-clamp-2 group-hover:text-primary transition-colors">
+                          {article.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-caption text-muted-foreground">{article.section}</span>
+                          <span className="text-caption text-muted-foreground">·</span>
+                          <span className="text-caption text-muted-foreground">
+                            {new Date(article.publishedAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 flex-shrink-0 mt-1 transition-opacity" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reddit.length > 0 && (
+              <div className="space-y-2">
+                {guardian.length > 0 && <div className="border-t border-border" />}
+                <div className="text-caption text-muted-foreground font-medium uppercase tracking-wide">
+                  Reddit
+                </div>
+                <div className="space-y-1">
+                  {reddit.map((post, i) => (
+                    <a
+                      key={i}
+                      href={post.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-start gap-2 group hover:bg-secondary/50 rounded-md p-2 -mx-2 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-small font-medium line-clamp-2 group-hover:text-primary transition-colors">
+                          {post.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="secondary" className="text-caption px-1.5 py-0">
+                            r/{post.subreddit}
+                          </Badge>
+                          <span className="text-caption text-muted-foreground">
+                            {post.score >= 1000
+                              ? `${(post.score / 1000).toFixed(1)}k`
+                              : post.score} upvotes
+                          </span>
+                          <span className="text-caption text-muted-foreground">·</span>
+                          <span className="text-caption text-muted-foreground">
+                            {post.numComments} comments
+                          </span>
+                        </div>
+                      </div>
+                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 flex-shrink-0 mt-1 transition-opacity" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function MarketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: market, isLoading, error } = useMarket(id);
   const [timeframe, setTimeframe] = useState("30D");
-  const [isWatched, setIsWatched] = useState(() => getWatchlist().includes(id));
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
+  const { user } = useAuth();
+  const { isWatched, toggleWatchlist } = useWatchlist();
+  const { createAlert } = useAlerts(user?.id);
 
-  // Generate chart data
+  // Alert dialog state
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertName, setAlertName] = useState("");
+  const [alertType, setAlertType] = useState<CreateAlertInput["alert_type"]>("odds");
+  const [alertThreshold, setAlertThreshold] = useState("10");
+  const [alertEmail, setAlertEmail] = useState(true);
+  const [alertSubmitting, setAlertSubmitting] = useState(false);
+  const [alertError, setAlertError] = useState<string | null>(null);
+  const [alertSuccess, setAlertSuccess] = useState(false);
+
+  function openAlertDialog() {
+    setAlertName(market?.name ? `Alert: ${market.name.slice(0, 40)}` : "New Alert");
+    setAlertType("odds");
+    setAlertThreshold("10");
+    setAlertEmail(true);
+    setAlertError(null);
+    setAlertSuccess(false);
+    setAlertOpen(true);
+  }
+
+  async function handleCreateAlert(e: React.FormEvent) {
+    e.preventDefault();
+    if (!market) return;
+    setAlertSubmitting(true);
+    setAlertError(null);
+    const err = await createAlert({
+      name: alertName,
+      alert_type: alertType,
+      market_name: market.name,
+      threshold: parseFloat(alertThreshold) || 10,
+      delivery_email: alertEmail,
+    });
+    setAlertSubmitting(false);
+    if (err) {
+      setAlertError(err);
+    } else {
+      setAlertSuccess(true);
+      setTimeout(() => setAlertOpen(false), 1800);
+    }
+  }
+
+  // Live WebSocket data (real CLOB connection when yesTokenId available)
+  const { currentOdds, lastUpdate, volatility, momentum, liveOrderBook, liveTrades, feedError } = useSingleMarketWebSocket(
+    id,
+    market?.yesOdds,
+    market?.yesTokenId
+  );
+
+  // Periodic tick to re-evaluate staleness even when no other state changes occur
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!market?.yesTokenId) return;
+    const id = setInterval(() => setTick((t) => t + 1), 5_000);
+    return () => clearInterval(id);
+  }, [market?.yesTokenId]);
+
+  // Stale data: if no WS update in 60s, data may be stale
+  const isLiveDataStale = market?.yesTokenId
+    ? lastUpdate === null || Date.now() - lastUpdate > 60_000
+    : false;
+
+  // Prefer live WebSocket odds; fall back to query data
+  const displayYesOdds = currentOdds?.yes ?? market?.yesOdds ?? 50;
+  const displayNoOdds = currentOdds?.no ?? market?.noOdds ?? 50;
+
+  // Fetch real price history from CLOB API
+  const { data: realHistory } = usePriceHistory(market?.yesTokenId, timeframe);
+
+  // AI market summary
+  const { data: aiSummary, isLoading: aiLoading, error: aiError } = useMarketSummary(market?.id);
+
+  // Fetch real order book from CLOB REST API; prefer live WebSocket snapshot
+  const { data: restOrderBook } = useOrderbook(market?.yesTokenId);
+  const orderBook = liveOrderBook ?? restOrderBook ?? { bids: [], asks: [], maxTotal: 0 };
+
+  // Price history: use real CLOB data or show empty (no random fallback)
   const chartData = useMemo(() => {
     if (!market) return [];
-    const days = timeframe === "24H" ? 1 : timeframe === "7D" ? 7 : timeframe === "30D" ? 30 : timeframe === "3M" ? 90 : 365;
-    return generateHistoricalData(market.yesOdds, days);
-  }, [market, timeframe]);
+    return realHistory && realHistory.length > 0 ? realHistory : [];
+  }, [market, realHistory]);
 
-  // Generate order book
-  const orderBook = useMemo(() => {
-    if (!market) return { bids: [], asks: [], maxTotal: 0 };
-    return generateOrderBook(market.yesOdds);
-  }, [market]);
-
-  const trades = useMemo(() => generateMockTrades(), []);
-
-  // Mock volatility data
-  const volatility: 'low' | 'medium' | 'high' = 'medium';
-  const momentum: 'bullish' | 'bearish' | 'neutral' = market && market.change24h > 0 ? 'bullish' : market && market.change24h < 0 ? 'bearish' : 'neutral';
+  // Related news coverage — pass market question + tags for targeted search
+  const { guardian: guardianArticles, reddit: redditPosts, isLoading: newsLoading } = useMarketNews(
+    market?.name,
+    market?.tags
+  );
 
   // Show loading while checking auth
   if (!shouldShowContent) {
@@ -358,10 +556,17 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                 <span className="w-1.5 h-1.5 rounded-full bg-success mr-1.5" />
                 Active
               </Badge>
-              <Badge variant="secondary" className="text-caption gap-1">
-                <Broadcast className="h-2.5 w-2.5 text-success animate-pulse" />
-                Live
-              </Badge>
+              {feedError || isLiveDataStale ? (
+                <Badge variant="secondary" className="text-caption gap-1 text-warning" title={feedError ?? "Live feed stale"}>
+                  <Broadcast className="h-2.5 w-2.5 text-warning" />
+                  Reconnecting
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="text-caption gap-1">
+                  <Broadcast className="h-2.5 w-2.5 text-success animate-pulse" />
+                  Live
+                </Badge>
+              )}
             </div>
             <h1 className="text-title md:text-display font-bold mb-2">{market.name}</h1>
             {market.description && (
@@ -376,19 +581,13 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
               variant="outline"
               size="sm"
               onClick={() => {
-                toggleWatchlist(id);
-                setIsWatched(!isWatched);
-                // Dispatch storage event for cross-component sync
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'polypro-watchlist',
-                    newValue: JSON.stringify(getWatchlist()),
-                  }));
+                if (market) {
+                  toggleWatchlist(id, market.name, market.category);
                 }
               }}
             >
-              <Star className={`h-4 w-4 mr-2 ${isWatched ? "fill-primary text-primary" : ""}`} weight={isWatched ? "fill" : "regular"} />
-              {isWatched ? "Watching" : "Watch"}
+              <Star className={`h-4 w-4 mr-2 ${isWatched(id) ? "fill-primary text-primary" : ""}`} weight={isWatched(id) ? "fill" : "regular"} />
+              {isWatched(id) ? "Watching" : "Watch"}
             </Button>
             <Button variant="outline" size="sm">
               <ShareNetwork className="h-4 w-4 mr-2" />
@@ -407,13 +606,13 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                   <div className="flex items-center gap-8">
                     <div>
                       <div className="text-display font-bold text-success">
-                        {market.yesOdds}%
+                        {displayYesOdds}%
                       </div>
                       <div className="text-small text-muted-foreground">YES</div>
                     </div>
                     <div>
                       <div className="text-display font-bold text-destructive">
-                        {market.noOdds}%
+                        {displayNoOdds}%
                       </div>
                       <div className="text-small text-muted-foreground">NO</div>
                     </div>
@@ -432,7 +631,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   </div>
                   <div className="flex gap-2 flex-wrap">
-                    <Button>
+                    <Button onClick={openAlertDialog}>
                       <Bell className="h-4 w-4 mr-2" />
                       Create Alert
                     </Button>
@@ -470,75 +669,64 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="yesGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="oklch(45% 0.15 145)" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="oklch(45% 0.15 145)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fill: "currentColor", fontSize: 11 }}
-                        className="text-muted-foreground"
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis
-                        domain={[0, 100]}
-                        tick={{ fill: "currentColor", fontSize: 11 }}
-                        className="text-muted-foreground"
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(v) => `${v}%`}
-                      />
-                      <Tooltip
-                        content={({ active, payload, label }) => {
-                          if (!active || !payload?.length) return null;
-                          const data = payload[0]?.payload;
-                          return (
-                            <div className="bg-popover border border-border rounded-md p-3 shadow-lg">
-                              <div className="text-small font-medium mb-1">{label}</div>
-                              <div className="text-caption text-success">YES: {data?.yes}%</div>
-                              <div className="text-caption text-destructive">NO: {data?.no}%</div>
-                              <div className="text-caption text-muted-foreground mt-1">
-                                Range: {data?.low}% - {data?.high}%
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="yes"
-                        stroke="oklch(45% 0.15 145)"
-                        strokeWidth={2}
-                        fill="url(#yesGradient)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                {/* Volume bars */}
-                <div className="h-16 mt-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                      <XAxis dataKey="date" hide />
-                      <YAxis hide />
-                      <Bar dataKey="volume" radius={[2, 2, 0, 0]}>
-                        {chartData.map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill="oklch(50% 0 0)" 
-                            opacity={0.3}
+                {chartData.length === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                    <ChartLine className="h-8 w-8 opacity-30" />
+                    <p className="text-small">No price history available for this timeframe.</p>
+                    <p className="text-caption opacity-60">Price history is fetched from Polymarket CLOB.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData}>
+                          <defs>
+                            <linearGradient id="yesGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="oklch(45% 0.15 145)" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="oklch(45% 0.15 145)" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fill: "currentColor", fontSize: 11 }}
+                            className="text-muted-foreground"
+                            tickLine={false}
+                            axisLine={false}
                           />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                          <YAxis
+                            domain={[0, 100]}
+                            tick={{ fill: "currentColor", fontSize: 11 }}
+                            className="text-muted-foreground"
+                            tickLine={false}
+                            axisLine={false}
+                            tickFormatter={(v) => `${v}%`}
+                          />
+                          <Tooltip
+                            content={({ active, payload, label }) => {
+                              if (!active || !payload?.length) return null;
+                              const data = payload[0]?.payload;
+                              return (
+                                <div className="bg-popover border border-border rounded-md p-3 shadow-lg">
+                                  <div className="text-small font-medium mb-1">{label}</div>
+                                  <div className="text-caption text-success">YES: {data?.yes}%</div>
+                                  <div className="text-caption text-destructive">NO: {data?.no}%</div>
+                                </div>
+                              );
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="yes"
+                            stroke="oklch(45% 0.15 145)"
+                            strokeWidth={2}
+                            fill="url(#yesGradient)"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -568,37 +756,51 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
               <TabsContent value="activity" className="mt-4">
                 <Card>
                   <CardContent className="p-0">
-                    <div className="relative">
-                      <div className="overflow-x-auto">
-                        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card to-transparent pointer-events-none md:hidden z-10" />
-                        <table className="w-full min-w-[600px]">
-                          <thead>
-                            <tr className="border-b border-border">
-                              <th className="text-caption font-medium text-muted-foreground text-left p-3">Time</th>
-                              <th className="text-caption font-medium text-muted-foreground text-left p-3">Side</th>
-                              <th className="text-caption font-medium text-muted-foreground text-right p-3">Price</th>
-                              <th className="text-caption font-medium text-muted-foreground text-right p-3">Qty</th>
-                              <th className="text-caption font-medium text-muted-foreground text-right p-3">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {trades.map((trade) => (
-                              <tr key={trade.id} className="border-b border-border/50 hover:bg-secondary/50 transition-base">
-                                <td className="text-small p-3 font-mono">{trade.time}</td>
-                                <td className={`text-small p-3 ${
-                                  trade.side.includes("YES") ? "text-success" : "text-destructive"
-                                }`}>
-                                  {trade.side}
-                                </td>
-                                <td className="text-small p-3 text-right font-mono">{trade.price}</td>
-                                <td className="text-small p-3 text-right font-mono">{trade.quantity}</td>
-                                <td className="text-small p-3 text-right font-mono">{trade.total}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                    {liveTrades.length === 0 ? (
+                      <div className="py-12 text-center text-muted-foreground">
+                        <Broadcast className="h-8 w-8 mx-auto mb-3 opacity-40 animate-pulse" />
+                        <p className="text-small font-medium">Listening for order book changes&hellip;</p>
+                        <p className="text-caption mt-1 opacity-70">Live trade events will appear here as they occur.</p>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="relative">
+                        <div className="overflow-x-auto">
+                          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card to-transparent pointer-events-none md:hidden z-10" />
+                          <table className="w-full min-w-[500px]">
+                            <thead>
+                              <tr className="border-b border-border">
+                                <th className="text-caption font-medium text-muted-foreground text-left p-3">Time</th>
+                                <th className="text-caption font-medium text-muted-foreground text-left p-3">Side</th>
+                                <th className="text-caption font-medium text-muted-foreground text-right p-3">Price</th>
+                                <th className="text-caption font-medium text-muted-foreground text-right p-3">Qty (USDC)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {liveTrades.map((trade: LiveTrade) => (
+                                <tr key={trade.id} className="border-b border-border/50 hover:bg-secondary/50 transition-base">
+                                  <td className="text-small p-3 font-mono">
+                                    {new Date(trade.timestamp).toLocaleTimeString("en-US", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      second: "2-digit",
+                                    })}
+                                  </td>
+                                  <td className={`text-small p-3 font-medium ${trade.side === "buy" ? "text-success" : "text-destructive"}`}>
+                                    {trade.side === "buy" ? "Buy YES" : "Sell YES"}
+                                  </td>
+                                  <td className="text-small p-3 text-right font-mono">
+                                    {(trade.price * 100).toFixed(1)}¢
+                                  </td>
+                                  <td className="text-small p-3 text-right font-mono">
+                                    ${trade.size.toLocaleString()}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -634,6 +836,13 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                 </Card>
               </TabsContent>
             </Tabs>
+
+            {/* Related News Coverage */}
+            <RelatedCoverage
+              guardian={guardianArticles}
+              reddit={redditPosts}
+              isLoading={newsLoading}
+            />
           </div>
 
           {/* Sidebar */}
@@ -679,39 +888,129 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
               </CardContent>
             </Card>
 
-            {/* AI Insights (Pro feature) */}
-            <Card className="relative overflow-hidden">
-              <CardHeader className="flex flex-row items-center gap-2 pb-2">
-                <Sparkle className="h-4 w-4 text-primary" />
-                <CardTitle className="text-subtitle">AI Insight</CardTitle>
-                <Badge variant="secondary" className="ml-auto">Professional</Badge>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 filter blur-sm">
-                  <p className="text-small text-muted-foreground">
-                    This market&apos;s odds ({market.yesOdds}%) diverge from our model estimate (47%). 
-                    Historical patterns suggest potential value opportunity.
-                  </p>
-                  <div className="flex items-center justify-between text-small">
-                    <span className="text-muted-foreground">Model Confidence</span>
-                    <span className="font-semibold">68%</span>
-                  </div>
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-[2px]">
-                  <div className="text-center p-4">
-                    <p className="text-small font-medium mb-2">
-                      Upgrade to Professional for AI insights
-                    </p>
-                    <Button size="sm" asChild>
-                      <Link href="/pricing">Upgrade</Link>
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* AI Analysis panel */}
+            <AiAnalysisPanel
+              isLoading={aiLoading}
+              summary={aiSummary ?? null}
+              error={aiError ? String(aiError) : null}
+            />
           </div>
         </div>
       </div>
+
+      {/* Create Alert Dialog */}
+      <Dialog open={alertOpen} onOpenChange={setAlertOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-4 w-4" />
+              Create Alert
+            </DialogTitle>
+            <DialogDescription>
+              Get notified when this market changes.
+            </DialogDescription>
+          </DialogHeader>
+
+          {alertSuccess ? (
+            <div className="py-8 text-center space-y-2">
+              <div className="text-success text-title font-semibold">Alert created!</div>
+              <p className="text-small text-muted-foreground">
+                You&apos;ll be notified when the condition is met.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleCreateAlert} className="space-y-4 pt-1">
+              {/* Market (read-only) */}
+              <div className="space-y-1.5">
+                <Label className="text-small">Market</Label>
+                <p className="text-small text-muted-foreground line-clamp-2 rounded-md border border-border px-3 py-2 bg-secondary/40">
+                  {market?.name}
+                </p>
+              </div>
+
+              {/* Alert name */}
+              <div className="space-y-1.5">
+                <Label htmlFor="alert-name" className="text-small">Alert Name</Label>
+                <Input
+                  id="alert-name"
+                  value={alertName}
+                  onChange={(e) => setAlertName(e.target.value)}
+                  placeholder="E.g. YES odds spike"
+                  required
+                  maxLength={80}
+                />
+              </div>
+
+              {/* Alert type */}
+              <div className="space-y-1.5">
+                <Label className="text-small">Alert Type</Label>
+                <Select value={alertType} onValueChange={(v) => setAlertType(v as CreateAlertInput["alert_type"])}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="odds">Odds Movement</SelectItem>
+                    <SelectItem value="volume">Volume Spike</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Threshold */}
+              <div className="space-y-1.5">
+                <Label htmlFor="alert-threshold" className="text-small">
+                  {alertType === "odds" ? "Threshold (%)" : "Volume threshold ($k)"}
+                </Label>
+                <Input
+                  id="alert-threshold"
+                  type="number"
+                  min="1"
+                  max={alertType === "odds" ? "99" : "10000"}
+                  value={alertThreshold}
+                  onChange={(e) => setAlertThreshold(e.target.value)}
+                  required
+                />
+                <p className="text-caption text-muted-foreground">
+                  {alertType === "odds"
+                    ? `Notify when YES odds drop below ${alertThreshold || "—"}%`
+                    : `Notify when 24h volume exceeds $${alertThreshold || "—"}k`}
+                </p>
+              </div>
+
+              {/* Email delivery */}
+              <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  id="alert-email"
+                  checked={alertEmail}
+                  onChange={(e) => setAlertEmail(e.target.checked)}
+                  className="h-4 w-4 accent-primary cursor-pointer"
+                />
+                <Label htmlFor="alert-email" className="text-small cursor-pointer">
+                  Send email notifications
+                </Label>
+              </div>
+
+              {alertError && (
+                <p className="text-caption text-destructive">{alertError}</p>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setAlertOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" className="flex-1" disabled={alertSubmitting}>
+                  {alertSubmitting ? "Creating…" : "Create Alert"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
       </main>
     </div>
   );

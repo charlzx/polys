@@ -30,7 +30,7 @@ export default function Error({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-small text-muted-foreground">
-            An unexpected error occurred. This has been logged and we'll look into it.
+            An unexpected error occurred. This has been logged and we&apos;ll look into it.
           </p>
           {error.digest && (
             <p className="text-caption text-muted-foreground font-mono bg-muted p-2 rounded">

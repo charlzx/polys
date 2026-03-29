@@ -2,13 +2,55 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "../components/providers";
 import { Toaster } from "@/components/ui/toaster";
+import { CookieBanner } from "@/components/CookieBanner";
+
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://polys.vercel.app";
+
 
 export const metadata: Metadata = {
   title: {
-    template: "%s | PolyPro",
-    default: "PolyPro - Prediction Market Intelligence",
+    template: "%s | Polys",
+    default: "Polys — Prediction Market Intelligence",
   },
-  description: "Track odds, detect arbitrage opportunities, and analyze market sentiment across Polymarket, Kalshi, and more. All in real-time.",
+  description: "Track real-time odds, detect cross-platform arbitrage, and analyze market sentiment across Polymarket and Kalshi. All in one place.",
+  metadataBase: new URL(BASE_URL),
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "Polys",
+    title: "Polys — Prediction Market Intelligence",
+    description: "Track real-time odds, detect cross-platform arbitrage, and analyze market sentiment across Polymarket and Kalshi.",
+    url: BASE_URL,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Polys — Prediction Market Intelligence",
+    description: "Track real-time odds, detect cross-platform arbitrage, and analyze market sentiment across Polymarket and Kalshi.",
+  },
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: "Polys",
+  description: "Prediction market intelligence platform tracking real-time odds, arbitrage opportunities, and AI-powered sentiment analysis across Polymarket and Kalshi.",
+  url: BASE_URL,
+  applicationCategory: "FinanceApplication",
+  operatingSystem: "Web",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+  },
+  featureList: [
+    "Real-time prediction market odds",
+    "Cross-platform arbitrage detection",
+    "AI market sentiment analysis",
+    "Whale trade tracking",
+    "Price history charts",
+  ],
 };
 
 export default function RootLayout({
@@ -18,10 +60,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body className="antialiased">
         <Providers>
           {children}
           <Toaster />
+          <CookieBanner />
         </Providers>
       </body>
     </html>

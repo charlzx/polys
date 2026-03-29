@@ -184,7 +184,7 @@ export default function PricingPage() {
           >
             <h2 className="text-title font-bold mb-4">Ready to get started?</h2>
             <p className="text-body text-muted-foreground mb-8">
-              Join thousands of traders using PolyPro to gain an edge in prediction markets.
+              Join thousands of traders using Polys to gain an edge in prediction markets.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="lg" asChild>

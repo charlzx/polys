@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -10,9 +11,14 @@ import { Footer } from "@/components/Footer";
 import { useMarkets } from "@/services/polymarket";
 import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
 import type { TransformedMarket } from "@/services/polymarket";
-import { mockPredictions } from "@/data/predictions";
+import { useUnifiedMarkets } from "@/hooks/useUnifiedMarkets";
+import { polymarketToUnified } from "@/services/unified";
+import type { UnifiedMarket } from "@/services/unified";
 import { features } from "@/data/features";
 import { categories } from "@/data/categories";
+import { LiveFeed } from "@/components/LiveFeed";
+import { MarketPulseGrid, SparklineStrip } from "@/components/MarketPulseGrid";
+import { CategoryTabs } from "@/components/CategoryTabs";
 import {
   MagnifyingGlass,
   TrendUpIcon,
@@ -22,91 +28,175 @@ import {
   Broadcast,
   ArrowRight,
   Pulse,
+  Newspaper,
 } from "@phosphor-icons/react";
-import { useState, useMemo, useEffect, useRef } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { KalshiPriceChart } from "@/components/KalshiPriceChart";
+import { useState, useMemo, useRef } from "react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 
-// Infinite scrolling predictions ticker
-function PredictionsTicker() {
+function SourceBadgeTiny({ source }: { source: UnifiedMarket["source"] }) {
+  if (source === "kalshi") {
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-500/40 text-blue-500">
+        Kalshi
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-500/40 text-purple-500">
+      Polymarket
+    </Badge>
+  );
+}
+
+// Single ticker item — defined outside component to avoid hook-violation during render
+function TickerItem({ market }: { market: UnifiedMarket }) {
+  const href = market.source === "kalshi" ? `/markets?source=kalshi` : `/markets/${market.id}`;
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-2 px-6 py-3 whitespace-nowrap border-r border-border/50 hover:bg-secondary/50 transition-colors"
+    >
+      <span className="text-small text-foreground font-medium line-clamp-1 max-w-[200px]">
+        {market.name}
+      </span>
+      <Badge variant="secondary" className="text-caption shrink-0">
+        {market.yesOdds}¢
+      </Badge>
+      {market.change24h !== 0 && (
+        <span className={`text-caption flex items-center gap-0.5 shrink-0 ${
+          market.change24h > 0 ? "text-success" : "text-destructive"
+        }`}>
+          {market.change24h > 0 ? (
+            <TrendUpIcon weight="bold" className="h-3 w-3" />
+          ) : (
+            <TrendDownIcon weight="bold" className="h-3 w-3" />
+          )}
+          {Math.abs(market.change24h)}%
+        </span>
+      )}
+    </Link>
+  );
+}
+
+// Infinite scrolling live markets ticker
+function PredictionsTicker({ markets }: { markets: UnifiedMarket[] }) {
+  const items = markets.slice(0, 10);
+  if (items.length === 0) {
+    return (
+      <div className="border-b border-border bg-secondary/30 h-[42px] animate-pulse" />
+    );
+  }
+
   return (
     <div className="relative overflow-hidden border-b border-border bg-secondary/30">
       <div className="flex animate-scroll">
-        {/* First set */}
-        {mockPredictions.map((prediction, index) => (
-          <div
-            key={`first-${index}`}
-            className="flex items-center gap-2 px-6 py-3 whitespace-nowrap border-r border-border/50"
-          >
-            <span className="text-small text-foreground font-medium">{prediction.text}</span>
-            <Badge variant={prediction.change >= 0 ? "default" : "secondary"} className="text-caption">
-              {prediction.probability}%
-            </Badge>
-            {prediction.change !== 0 && (
-              <span className={`text-caption flex items-center gap-0.5 ${
-                prediction.change > 0 ? "text-success" : "text-destructive"
-              }`}>
-                {prediction.change > 0 ? (
-                  <TrendUpIcon weight="bold" className="h-3 w-3" />
-                ) : (
-                  <TrendDownIcon weight="bold" className="h-3 w-3" />
-                )}
-                {Math.abs(prediction.change)}%
-              </span>
-            )}
-          </div>
-        ))}
-        {/* Second set for seamless loop */}
-        {mockPredictions.map((prediction, index) => (
-          <div
-            key={`second-${index}`}
-            className="flex items-center gap-2 px-6 py-3 whitespace-nowrap border-r border-border/50"
-          >
-            <span className="text-small text-foreground font-medium">{prediction.text}</span>
-            <Badge variant={prediction.change >= 0 ? "default" : "secondary"} className="text-caption">
-              {prediction.probability}%
-            </Badge>
-            {prediction.change !== 0 && (
-              <span className={`text-caption flex items-center gap-0.5 ${
-                prediction.change > 0 ? "text-success" : "text-destructive"
-              }`}>
-                {prediction.change > 0 ? (
-                  <TrendUpIcon weight="bold" className="h-3 w-3" />
-                ) : (
-                  <TrendDownIcon weight="bold" className="h-3 w-3" />
-                )}
-                {Math.abs(prediction.change)}%
-              </span>
-            )}
-          </div>
-        ))}
+        {items.map((m) => <TickerItem key={`first-${m.id}`} market={m} />)}
+        {items.map((m) => <TickerItem key={`second-${m.id}`} market={m} />)}
       </div>
     </div>
   );
 }
 
+function formatEndDate(dateStr: string): string {
+  if (!dateStr) return "";
+  try {
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
+// Homepage Kalshi detail dialog
+function HomepageKalshiDialog({ market, open, onClose }: { market: UnifiedMarket; open: boolean; onClose: () => void }) {
+  const formattedEnd = formatEndDate(market.endDate);
+  const ticker = market.id.replace(/^kalshi-/, "");
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base leading-snug">{market.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-caption">{market.category}</Badge>
+            <SourceBadgeTiny source={market.source} />
+          </div>
+          <div className="flex gap-4">
+            <div className="flex-1 text-center p-3 rounded-lg bg-success/10">
+              <div className="text-caption text-muted-foreground mb-1">YES</div>
+              <div className="text-title font-bold text-success">{market.yesOdds}%</div>
+            </div>
+            <div className="flex-1 text-center p-3 rounded-lg bg-destructive/10">
+              <div className="text-caption text-muted-foreground mb-1">NO</div>
+              <div className="text-title font-bold text-destructive">{market.noOdds}%</div>
+            </div>
+          </div>
+          {open && <KalshiPriceChart ticker={ticker} days={7} />}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+              <span>Volume</span>
+              <span className="font-medium text-foreground">{market.volume}</span>
+            </div>
+            {formattedEnd && (
+              <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+                <span>Closes</span>
+                <span className="font-medium text-foreground">{formattedEnd}</span>
+              </div>
+            )}
+          </div>
+          {market.externalUrl && (
+            <a href={market.externalUrl} target="_blank" rel="noopener noreferrer" className="block">
+              <button className="w-full py-2 px-4 rounded-md bg-secondary text-secondary-foreground text-small font-medium hover:bg-secondary/80 transition-colors">
+                Trade on Kalshi →
+              </button>
+            </a>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // Featured market component with animation
-function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; isLive?: boolean; index: number }) {
+function FeaturedMarket({ market, isLive, index }: { market: UnifiedMarket; isLive?: boolean; index: number }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-50px" });
+  const isKalshi = market.source === "kalshi";
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 30 }}
-      animate={isInView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.5, delay: index * 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
-    >
-      <Link
-        href={`/markets/${market.id}`}
-        className="block p-4 rounded-xl bg-card border border-border hover:border-primary/40 hover:shadow-lg transition-all group"
-      >
+  const cardContent = (
+    <div className="block rounded-xl bg-card border border-border hover:border-primary/40 transition-all group overflow-hidden min-h-[44px] cursor-pointer">
+      <div className="relative w-full h-28 bg-secondary/50">
+        {market.image ? (
+          <Image
+            src={market.image}
+            alt={market.name}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 25vw"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Newspaper className="h-8 w-8 text-muted-foreground/30" />
+          </div>
+        )}
+      </div>
+      <div className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <Badge variant="outline" className="text-caption">
                 {market.category}
               </Badge>
-              {isLive && (
+              <SourceBadgeTiny source={market.source} />
+              {isLive && market.source === "polymarket" && (
                 <span className="flex items-center gap-1 text-caption text-success">
                   <Broadcast weight="fill" className="h-2.5 w-2.5 animate-pulse" />
                   Live
@@ -118,19 +208,21 @@ function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; 
             </h3>
             <div className="flex items-center gap-3 text-caption text-muted-foreground">
               <span>{market.volume} Vol</span>
-              <span
-                className={`flex items-center gap-0.5 ${
-                  market.change24h >= 0 ? "text-success" : "text-destructive"
-                }`}
-              >
-                {market.change24h >= 0 ? (
-                  <TrendUpIcon weight="bold" className="h-3 w-3" />
-                ) : (
-                  <TrendDownIcon weight="bold" className="h-3 w-3" />
-                )}
-                {market.change24h >= 0 ? "+" : ""}
-                {market.change24h}%
-              </span>
+              {market.change24h !== 0 && (
+                <span
+                  className={`flex items-center gap-0.5 ${
+                    market.change24h >= 0 ? "text-success" : "text-destructive"
+                  }`}
+                >
+                  {market.change24h >= 0 ? (
+                    <TrendUpIcon weight="bold" className="h-3 w-3" />
+                  ) : (
+                    <TrendDownIcon weight="bold" className="h-3 w-3" />
+                  )}
+                  {market.change24h >= 0 ? "+" : ""}
+                  {market.change24h}%
+                </span>
+              )}
             </div>
           </div>
           <div className="text-right shrink-0">
@@ -140,34 +232,72 @@ function FeaturedMarket({ market, isLive, index }: { market: TransformedMarket; 
             <div className="text-caption text-muted-foreground">YES</div>
           </div>
         </div>
-      </Link>
-    </motion.div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <motion.div
+        ref={ref}
+        initial={{ opacity: 0, y: 30 }}
+        animate={isInView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.5, delay: index * 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
+      >
+        {isKalshi ? (
+          <div onClick={() => setDialogOpen(true)}>{cardContent}</div>
+        ) : (
+          <Link href={`/markets/${market.id}`}>{cardContent}</Link>
+        )}
+      </motion.div>
+      {isKalshi && (
+        <HomepageKalshiDialog market={market} open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      )}
+    </>
   );
 }
 
 // Mobile-friendly market row
-function MarketRow({ market, rank }: { market: TransformedMarket; rank: number }) {
-  return (
-    <Link
-      href={`/markets/${market.id}`}
-      className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors group"
-    >
+function MarketRow({ market, rank }: { market: UnifiedMarket; rank: number }) {
+  const isKalshi = market.source === "kalshi";
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const rowContent = (
+    <div className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors group min-h-[44px] cursor-pointer">
       <span className="text-caption text-muted-foreground w-5 text-center font-mono shrink-0">
         {rank}
       </span>
+      <div className="relative w-8 h-8 rounded-md overflow-hidden bg-secondary/70 shrink-0 hidden sm:block">
+        {market.image ? (
+          <Image
+            src={market.image}
+            alt=""
+            fill
+            className="object-cover"
+            sizes="32px"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Newspaper className="h-4 w-4 text-muted-foreground/40" />
+          </div>
+        )}
+      </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
+        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
           <Badge variant="outline" className="text-caption shrink-0 px-1.5 py-0">
             {market.category}
           </Badge>
-          <span
-            className={`text-caption font-medium shrink-0 ${
-              market.change24h >= 0 ? "text-success" : "text-destructive"
-            }`}
-          >
-            {market.change24h >= 0 ? "+" : ""}
-            {market.change24h}%
-          </span>
+          <SourceBadgeTiny source={market.source} />
+          {market.change24h !== 0 && (
+            <span
+              className={`text-caption font-medium shrink-0 ${
+                market.change24h >= 0 ? "text-success" : "text-destructive"
+              }`}
+            >
+              {market.change24h >= 0 ? "+" : ""}
+              {market.change24h}%
+            </span>
+          )}
         </div>
         <span className="text-small font-medium line-clamp-1 group-hover:text-primary transition-colors">
           {market.name}
@@ -185,31 +315,24 @@ function MarketRow({ market, rank }: { market: TransformedMarket; rank: number }
         </span>
         <CaretRight weight="bold" className="h-4 w-4 text-muted-foreground" />
       </div>
-    </Link>
-  );
-}
-
-// Stats ticker component
-function StatsTicker() {
-  return (
-    <div className="flex items-center gap-8 text-small">
-      <div className="flex items-center gap-2">
-        <span className="text-muted-foreground">Markets Tracked</span>
-        <span className="font-mono font-semibold">2,847</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-muted-foreground">24h Volume</span>
-        <span className="font-mono font-semibold">42.3M</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-muted-foreground">Active Users</span>
-        <span className="font-mono font-semibold">18.2K</span>
-      </div>
     </div>
   );
+
+  return (
+    <>
+      {isKalshi ? (
+        <div onClick={() => setDialogOpen(true)}>{rowContent}</div>
+      ) : (
+        <Link href={`/markets/${market.id}`}>{rowContent}</Link>
+      )}
+      {isKalshi && (
+        <HomepageKalshiDialog market={market} open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      )}
+    </>
+  );
 }
 
-// Stacking Feature Card Component with improved animation
+// Stacking Feature Card Component with improved animation (mobile)
 function StackingFeatureCard({ feature, index }: { feature: typeof features[0]; index: number }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
@@ -217,48 +340,32 @@ function StackingFeatureCard({ feature, index }: { feature: typeof features[0]; 
     offset: ["start end", "start center"],
   });
 
-  // Scale transforms for stacking effect
-  const scale = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [0.85, 1]
-  );
-  
-  const opacity = useTransform(
-    scrollYProgress,
-    [0, 0.5, 1],
-    [0.3, 0.8, 1]
-  );
-
-  const y = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [60, 0]
-  );
-
-  // Calculate sticky offset for stacking
+  const scale = useTransform(scrollYProgress, [0, 1], [0.85, 1]);
+  const opacity = useTransform(scrollYProgress, [0, 0.5, 1], [0.3, 0.8, 1]);
+  const y = useTransform(scrollYProgress, [0, 1], [60, 0]);
   const stickyTop = 100 + index * 20;
 
   return (
     <motion.div
       ref={cardRef}
-      style={{ 
-        scale, 
+      style={{
+        scale,
         opacity,
         y,
         position: "sticky",
         top: stickyTop,
         zIndex: index,
       }}
-      className="p-6 rounded-2xl bg-card border border-border shadow-lg"
+      className="p-5 rounded-2xl bg-card border border-border shadow-lg"
     >
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
           <feature.icon weight="duotone" className="h-6 w-6 text-primary" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h3 className="text-subtitle font-semibold mb-2">{feature.title}</h3>
           <p className="text-small text-muted-foreground">{feature.description}</p>
+          {feature.Preview && <feature.Preview />}
         </div>
       </div>
     </motion.div>
@@ -269,37 +376,38 @@ export default function LandingPage() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  
-  // Hero animation ref
+
   const heroRef = useRef<HTMLDivElement>(null);
   const heroInView = useInView(heroRef, { once: true });
 
-  // Fetch market data
-  const { data: markets, isLoading } = useMarkets({ limit: 20, active: true });
+  const { data: unifiedMarkets, isLoading } = useUnifiedMarkets({ limit: 100 });
 
-  // Get market IDs for WebSocket
-  const marketIds = useMemo(() => markets?.map((m) => m.id) || [], [markets]);
+  const { data: polyMarkets } = useMarkets({ limit: 20, active: true });
 
-  // Real-time updates
-  const { isConnected, applyUpdatesToMarkets, initializeMarket } = useMarketWebSocket({
-    marketIds,
-    enabled: marketIds.length > 0,
+  const tokenPairs = useMemo(
+    () =>
+      (polyMarkets ?? [])
+        .filter((m) => m.yesTokenId)
+        .map((m) => ({ marketId: m.id, yesTokenId: m.yesTokenId! })),
+    [polyMarkets]
+  );
+
+  const { isConnected, applyUpdatesToMarkets } = useMarketWebSocket({
+    tokenPairs,
+    marketIds: polyMarkets?.map((m) => m.id) ?? [],
+    enabled: (polyMarkets?.length ?? 0) > 0,
   });
 
-  // Initialize markets
-  useEffect(() => {
-    if (markets) {
-      markets.forEach((m) => initializeMarket(m.id, m.yesOdds, m.volume24h));
-    }
-  }, [markets, initializeMarket]);
+  const livePolyUnified = useMemo(() => {
+    if (!polyMarkets) return [];
+    return applyUpdatesToMarkets(polyMarkets).map(polymarketToUnified);
+  }, [polyMarkets, applyUpdatesToMarkets]);
 
-  // Apply live updates
-  const liveMarkets = useMemo(() => {
-    if (!markets) return [];
-    return applyUpdatesToMarkets(markets);
-  }, [markets, applyUpdatesToMarkets]);
+  const liveMarkets = useMemo<UnifiedMarket[]>(() => {
+    const livePolyMap = new Map(livePolyUnified.map((m) => [m.id, m]));
+    return (unifiedMarkets ?? []).map((m) => livePolyMap.get(m.id) ?? m);
+  }, [unifiedMarkets, livePolyUnified]);
 
-  // Filter markets
   const filteredMarkets = useMemo(() => {
     let result = liveMarkets;
 
@@ -319,7 +427,6 @@ export default function LandingPage() {
     return result;
   }, [liveMarkets, selectedCategory, searchQuery]);
 
-  // Top trending (first 4)
   const featuredMarkets = filteredMarkets.slice(0, 4);
   const remainingMarkets = filteredMarkets.slice(4, 12);
 
@@ -329,86 +436,126 @@ export default function LandingPage() {
       <MobileNav isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
       {/* Header */}
-      <PublicHeader 
-        searchQuery={searchQuery} 
+      <PublicHeader
+        searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onMobileNavOpen={() => setMobileNavOpen(true)}
       />
 
-      {/* Predictions Ticker */}
-      <PredictionsTicker />
+      {/* Live markets ticker */}
+      <PredictionsTicker markets={liveMarkets} />
 
-      {/* Hero Section */}
+      {/* Hero Section — split layout */}
       <section
         ref={heroRef}
-        className="border-b border-border bg-gradient-to-b from-secondary/30 to-background"
+        className="border-b border-border bg-secondary/20"
       >
-        <div className="container py-12 md:py-20">
-          <div className="max-w-3xl">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="flex items-center gap-2 mb-4"
-            >
-              <Badge variant="secondary" className="font-medium">
-                <Pulse weight="fill" className="h-3 w-3 mr-1" />
-                Real-time Analytics
-              </Badge>
-              {isConnected && (
-                <Badge variant="outline" className="text-success border-success/30">
-                  <Broadcast weight="fill" className="h-2.5 w-2.5 mr-1 animate-pulse" />
-                  Connected
+        <div className="container py-10 md:py-16">
+          <div className="lg:grid lg:grid-cols-2 lg:gap-12 lg:items-center">
+            {/* Left column */}
+            <div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="flex items-center gap-2 mb-4"
+              >
+                <Badge variant="secondary" className="font-medium">
+                  <Pulse weight="fill" className="h-3 w-3 mr-1" />
+                  Real-time Analytics
                 </Badge>
-              )}
-            </motion.div>
-            
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="text-[2.25rem] md:text-[3.5rem] font-bold leading-[1.1] tracking-tight mb-4"
-            >
-              Prediction Market
-              <br />
-              <span className="text-muted-foreground">Intelligence</span>
-            </motion.h1>
-            
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="text-body md:text-subtitle text-muted-foreground mb-8 max-w-xl"
-            >
-              Track odds, detect arbitrage opportunities, and analyze market sentiment across Polymarket, Kalshi, and more. All in real-time.
-            </motion.p>
-            
+                {isConnected && (
+                  <Badge variant="outline" className="text-success border-success/30">
+                    <Broadcast weight="fill" className="h-2.5 w-2.5 mr-1 animate-pulse" />
+                    Connected
+                  </Badge>
+                )}
+              </motion.div>
+
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
+                style={{ fontSize: "clamp(2rem, 6vw, 3.5rem)" }}
+                className="font-bold leading-[1.1] tracking-tight mb-4"
+              >
+                Prediction Market
+                <br />
+                <span className="text-muted-foreground">Intelligence</span>
+              </motion.h1>
+
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="text-body md:text-subtitle text-muted-foreground mb-8 max-w-xl"
+              >
+                Track odds, detect arbitrage opportunities, and analyze market sentiment across Polymarket, Kalshi, and more. All in real-time.
+              </motion.p>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6"
+              >
+                <Button size="lg" asChild className="w-full sm:w-auto">
+                  <Link href="/auth?mode=signup">
+                    Start for free
+                    <ArrowRight weight="bold" className="h-4 w-4 ml-2" />
+                  </Link>
+                </Button>
+                <Button variant="outline" size="lg" asChild className="w-full sm:w-auto">
+                  <Link href="/dashboard">View dashboard</Link>
+                </Button>
+              </motion.div>
+
+              {/* Mobile sparkline strip — below CTAs, above md */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={heroInView ? { opacity: 1, y: 0 } : {}}
+                transition={{ duration: 0.6, delay: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="md:hidden mb-6"
+              >
+                <SparklineStrip markets={liveMarkets} />
+              </motion.div>
+
+            </div>
+
+            {/* Right column — Market Pulse Grid (desktop only) */}
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="flex flex-col sm:flex-row items-start sm:items-center gap-4"
+              initial={{ opacity: 0, x: 20 }}
+              animate={heroInView ? { opacity: 1, x: 0 } : {}}
+              transition={{ duration: 0.7, delay: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="hidden lg:block"
             >
-              <Button size="lg" asChild>
-                <Link href="/auth?mode=signup">
-                  Start for free
-                  <ArrowRight weight="bold" className="h-4 w-4 ml-2" />
-                </Link>
-              </Button>
-              <Button variant="outline" size="lg" asChild>
-                <Link href="/dashboard">View dashboard</Link>
-              </Button>
+              <MarketPulseGrid markets={liveMarkets} />
             </motion.div>
           </div>
+        </div>
+      </section>
 
-          {/* Stats ticker - desktop only */}
+      {/* Happening Now — full-width live activity section */}
+      <section className="border-b border-border bg-background">
+        <div className="container py-8 md:py-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
-            animate={heroInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.6, delay: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="hidden lg:flex items-center gap-8 mt-12 pt-8 border-t border-border/50"
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="flex items-center gap-2 mb-6"
           >
-            <StatsTicker />
+            <Lightning weight="fill" className="h-4 w-4 text-primary" />
+            <h2 className="text-subtitle font-semibold">Happening Now</h2>
+            <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse ml-1" />
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+          >
+            <LiveFeed limit={9} showHeader={false} compact={false} columns={3} />
           </motion.div>
         </div>
       </section>
@@ -430,8 +577,8 @@ export default function LandingPage() {
               Professional-grade tools for prediction market analysis, all in one platform.
             </p>
           </motion.div>
-          
-          {/* Stacking cards on mobile, grid on desktop */}
+
+          {/* Grid on desktop */}
           <div className="hidden md:grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => (
               <motion.div
@@ -440,19 +587,20 @@ export default function LandingPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="p-6 rounded-2xl bg-card border border-border hover:border-primary/30 hover:shadow-lg transition-all"
+                className="p-6 rounded-2xl bg-card border border-border hover:border-primary/30 transition-all flex flex-col"
               >
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <feature.icon weight="duotone" className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="text-subtitle font-semibold mb-2">{feature.title}</h3>
                 <p className="text-small text-muted-foreground">{feature.description}</p>
+                {feature.Preview && <div className="mt-auto"><feature.Preview /></div>}
               </motion.div>
             ))}
           </div>
-          
+
           {/* Stacking cards on mobile */}
-          <div className="md:hidden relative" style={{ minHeight: `${features.length * 200}px` }}>
+          <div className="md:hidden relative" style={{ minHeight: `${features.length * 220}px` }}>
             {features.map((feature, index) => (
               <StackingFeatureCard
                 key={feature.title}
@@ -472,50 +620,30 @@ export default function LandingPage() {
             placeholder="Search markets..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 bg-secondary/50 border-transparent focus:border-border"
+            className="pl-9 w-full bg-secondary/50 border-transparent focus:border-border"
           />
         </div>
       </div>
 
-      {/* Category tabs */}
+      {/* Category tabs — animated pill strip */}
       <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-16 z-40">
         <div className="container">
-          <div className="flex items-center gap-1 py-2 overflow-x-auto scrollbar-hide">
-            {categories.map((cat) => (
-              <Button
-                key={cat}
-                variant={selectedCategory === cat ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setSelectedCategory(cat)}
-                className="shrink-0"
-              >
-                {cat === "Trending" && <Lightning weight="fill" className="h-3.5 w-3.5 mr-1" />}
-                {cat}
-              </Button>
-            ))}
-          </div>
+          <CategoryTabs selected={selectedCategory} onChange={setSelectedCategory} />
         </div>
       </div>
 
       {/* Main content */}
       <main className="container py-6 flex-1">
         {isLoading ? (
-          // Loading skeleton
           <div className="space-y-6">
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[...Array(4)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-32 rounded-xl bg-secondary/50 animate-pulse"
-                />
+                <div key={i} className="h-32 rounded-xl bg-secondary/50 animate-pulse" />
               ))}
             </div>
             <div className="space-y-2">
               {[...Array(8)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-14 rounded-lg bg-secondary/50 animate-pulse"
-                />
+                <div key={i} className="h-14 rounded-lg bg-secondary/50 animate-pulse" />
               ))}
             </div>
           </div>

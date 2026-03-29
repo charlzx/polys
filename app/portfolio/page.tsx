@@ -1,135 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo } from "react";
+import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import {
   TrendUpIcon,
   TrendDownIcon,
-  Wallet,
-  Coins,
-  Percent,
-  ChartPie,
-  ArrowUpRight,
-  Plus,
-  ArrowSquareOut,
+  Eye,
+  Star,
+  ArrowRight,
 } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  PieChart as RechartsPieChart,
-  Pie,
-  Cell,
-} from "recharts";
-
-// Mock portfolio data
-const portfolioStats = [
-  { label: "Total Value", value: "8,247", icon: Coins, change: "+847", positive: true },
-  {
-    label: "Unrealized P&L",
-    value: "+1,247",
-    icon: TrendUpIcon,
-    change: "+17.8%",
-    positive: true,
-  },
-  { label: "Realized P&L", value: "+892", icon: Coins, change: "This month", positive: true },
-  { label: "Win Rate", value: "68%", icon: Percent, change: "23 trades", positive: true },
-];
-
-// Mock positions data
-const positions = [
-  {
-    id: 1,
-    market: "2024 Presidential Election - Democratic Victory",
-    platform: "Polymarket",
-    side: "YES",
-    entryPrice: 0.45,
-    currentPrice: 0.52,
-    quantity: 200,
-    pnl: 14.0,
-    pnlPercent: 15.6,
-  },
-  {
-    id: 2,
-    market: "Bitcoin >$100k by March 2026",
-    platform: "Polymarket",
-    side: "YES",
-    entryPrice: 0.62,
-    currentPrice: 0.68,
-    quantity: 150,
-    pnl: 9.0,
-    pnlPercent: 9.7,
-  },
-  {
-    id: 3,
-    market: "Fed Rate Cut Q1 2026",
-    platform: "Polymarket",
-    side: "NO",
-    entryPrice: 0.58,
-    currentPrice: 0.56,
-    quantity: 100,
-    pnl: -2.0,
-    pnlPercent: -3.4,
-  },
-  {
-    id: 4,
-    market: "GPT-5 Release by June 2026",
-    platform: "Polymarket",
-    side: "YES",
-    entryPrice: 0.65,
-    currentPrice: 0.71,
-    quantity: 80,
-    pnl: 4.8,
-    pnlPercent: 9.2,
-  },
-  {
-    id: 5,
-    market: "Tesla Stock >$300 EOY",
-    platform: "Kalshi",
-    side: "YES",
-    entryPrice: 0.38,
-    currentPrice: 0.42,
-    quantity: 250,
-    pnl: 10.0,
-    pnlPercent: 10.5,
-  },
-];
-
-// Generate performance chart data
-const performanceData = [...Array(30)].map((_, i) => {
-  const date = new Date();
-  date.setDate(date.getDate() - (29 - i));
-  return {
-    date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    value: 7000 + Math.random() * 2000 + i * 40,
-  };
-});
-
-// Category breakdown data
-const categoryData = [
-  { name: "Politics", value: 45, color: "oklch(45% 0.15 145)" },
-  { name: "Crypto", value: 30, color: "oklch(58% 0.22 25)" },
-  { name: "Sports", value: 15, color: "oklch(65% 0.15 250)" },
-  { name: "Tech", value: 10, color: "oklch(55% 0.15 80)" },
-];
+import { Skeleton } from "@/components/ui/skeleton";
+import { useWatchlist } from "@/hooks/useWatchlist";
+import { useTrackedMarkets } from "@/hooks/useTrackedMarkets";
+import { motion } from "framer-motion";
 
 export default function PortfolioPage() {
-  const [timeframe, setTimeframe] = useState("30D");
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
+  const { watchlistItems, isLoading: watchlistLoading } = useWatchlist();
+  const { trackedMarkets, isLoading: marketsLoading } = useTrackedMarkets(watchlistItems);
 
-  // Show loading while checking auth
+  const isLoading = watchlistLoading || marketsLoading;
+
+  // Performance summary — only count markets where we have real 24h data
+  const summary = useMemo(() => {
+    const up = trackedMarkets.filter((m) => m.change24h > 0).length;
+    const down = trackedMarkets.filter((m) => m.change24h < 0).length;
+    return { up, down, total: trackedMarkets.length };
+  }, [trackedMarkets]);
+
   if (!shouldShowContent) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -142,281 +45,199 @@ export default function PortfolioPage() {
     <div className="min-h-screen bg-background">
       <AppHeader />
       <main className="pt-[120px] md:pt-[88px] pb-20 md:pb-0 min-h-screen">
-        <div className="container max-w-screen-2xl py-6 md:py-8 space-y-4 md:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-title md:text-display font-bold">Portfolio</h1>
-          <p className="text-small text-muted-foreground mt-1">
-            Track your positions and performance
-          </p>
-        </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Connect Wallet
-        </Button>
-      </div>
+        <div className="container max-w-screen-2xl py-6 md:py-8 space-y-6">
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-        {portfolioStats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={stat.label}>
-              <CardContent className="p-3 md:p-4">
-                <div className="flex items-center justify-between mb-1 md:mb-2">
-                  <Icon className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
-                  <span
-                    className={`text-caption font-medium ${
-                      stat.positive ? "text-success" : "text-destructive"
-                    }`}
-                  >
-                    {stat.change}
-                  </span>
+          {/* Header */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          >
+            <div>
+              <h1 className="text-title md:text-display font-bold">Watchlist</h1>
+              <p className="text-small text-muted-foreground mt-1">
+                Your watchlisted markets and how they&apos;re moving
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/markets">
+                <Eye className="h-4 w-4 mr-2" />
+                Browse Markets
+              </Link>
+            </Button>
+          </motion.div>
+
+          {/* Summary stats */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className="grid grid-cols-3 gap-4"
+          >
+            <Card>
+              <CardContent className="p-4 md:p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <Star weight="duotone" className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <div className="text-subtitle md:text-title font-bold">{stat.value}</div>
-                <div className="text-caption text-muted-foreground">{stat.label}</div>
+                {isLoading ? (
+                  <Skeleton className="h-7 w-10 mb-1" />
+                ) : (
+                  <div className="text-title md:text-display font-bold">{summary.total}</div>
+                )}
+                <div className="text-small text-muted-foreground">Markets Watched</div>
               </CardContent>
             </Card>
-          );
-        })}
-      </div>
 
-      {/* Main Content */}
-      <Tabs defaultValue="positions" className="space-y-4">
-        <TabsList className="w-full justify-start overflow-x-auto">
-          <TabsTrigger value="positions">Positions</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-        </TabsList>
+            <Card>
+              <CardContent className="p-4 md:p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendUpIcon weight="duotone" className="h-5 w-5 text-success" />
+                </div>
+                {isLoading ? (
+                  <Skeleton className="h-7 w-10 mb-1" />
+                ) : (
+                  <div className="text-title md:text-display font-bold text-success">{summary.up}</div>
+                )}
+                <div className="text-small text-muted-foreground">Up 24h</div>
+              </CardContent>
+            </Card>
 
-        {/* Positions Tab */}
-        <TabsContent value="positions" className="space-y-4">
-          <Card>
-            <CardHeader className="p-3 md:p-4 pb-2">
-              <CardTitle className="text-body md:text-subtitle">
-                Active Positions ({positions.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="relative">
-                <div className="overflow-x-auto">
-                  <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card to-transparent pointer-events-none lg:hidden z-10" />
-                  <table className="w-full min-w-[600px]">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-caption font-medium text-muted-foreground text-left p-3">
-                          Market
-                        </th>
-                        <th className="text-caption font-medium text-muted-foreground text-left p-3">
-                          Side
-                        </th>
-                        <th className="text-caption font-medium text-muted-foreground text-right p-3">
-                          Entry
-                        </th>
-                        <th className="text-caption font-medium text-muted-foreground text-right p-3">
-                          Current
-                        </th>
-                        <th className="text-caption font-medium text-muted-foreground text-right p-3">
-                          Qty
-                        </th>
-                        <th className="text-caption font-medium text-muted-foreground text-right p-3">
-                          P&L
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {positions.map((position) => (
-                        <tr
-                          key={position.id}
-                          className="border-b border-border/50 hover:bg-secondary/50 transition-base"
+            <Card>
+              <CardContent className="p-4 md:p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendDownIcon weight="duotone" className="h-5 w-5 text-destructive" />
+                </div>
+                {isLoading ? (
+                  <Skeleton className="h-7 w-10 mb-1" />
+                ) : (
+                  <div className="text-title md:text-display font-bold text-destructive">{summary.down}</div>
+                )}
+                <div className="text-small text-muted-foreground">Down 24h</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Market grid */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+          >
+            <Card>
+              <CardHeader className="p-4 md:p-5 pb-3">
+                <CardTitle className="text-subtitle">
+                  {isLoading ? "Loading…" : `${summary.total} Markets`}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {isLoading ? (
+                  <div className="divide-y divide-border">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="p-4 space-y-2">
+                        <Skeleton className="h-4 w-2/3" />
+                        <Skeleton className="h-4 w-1/3" />
+                      </div>
+                    ))}
+                  </div>
+                ) : trackedMarkets.length === 0 ? (
+                  <div className="p-10 text-center">
+                    <Star className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-subtitle font-semibold mb-2">No markets watched yet</h3>
+                    <p className="text-small text-muted-foreground mb-4 max-w-sm mx-auto">
+                      Star markets from the browse page to track them here and see how their odds move.
+                    </p>
+                    <Button asChild>
+                      <Link href="/markets">
+                        Browse Markets
+                        <ArrowRight weight="bold" className="h-4 w-4 ml-2" />
+                      </Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {trackedMarkets.map((market, index) => (
+                      <motion.div
+                        key={market.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.3, delay: index * 0.03 }}
+                      >
+                        <Link
+                          href={`/markets/${market.id}`}
+                          className="flex items-center gap-3 md:gap-4 p-4 hover:bg-secondary/50 transition-colors group"
                         >
-                          <td className="p-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-small font-medium truncate max-w-[200px]">
-                                {position.market}
+                          {/* Category + name */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <Badge variant="outline" className="text-caption shrink-0 px-1.5 py-0">
+                                {market.category}
+                              </Badge>
+                              <span
+                                className={`text-caption font-medium shrink-0 flex items-center gap-0.5 ${
+                                  market.change24h > 0
+                                    ? "text-success"
+                                    : market.change24h < 0
+                                    ? "text-destructive"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                {market.change24h > 0 ? (
+                                  <TrendUpIcon weight="bold" className="h-3 w-3" />
+                                ) : market.change24h < 0 ? (
+                                  <TrendDownIcon weight="bold" className="h-3 w-3" />
+                                ) : null}
+                                {market.change24h !== 0
+                                  ? `${market.change24h > 0 ? "+" : ""}${market.change24h}%`
+                                  : "—"}
                               </span>
                             </div>
-                            <span className="text-caption text-muted-foreground">
-                              {position.platform}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <Badge
-                              variant={position.side === "YES" ? "default" : "secondary"}
-                              className="text-caption"
-                            >
-                              {position.side}
-                            </Badge>
-                          </td>
-                          <td className="text-small p-3 text-right font-mono">
-                            ${position.entryPrice.toFixed(2)}
-                          </td>
-                          <td className="text-small p-3 text-right font-mono">
-                            ${position.currentPrice.toFixed(2)}
-                          </td>
-                          <td className="text-small p-3 text-right font-mono">
-                            {position.quantity}
-                          </td>
-                          <td
-                            className={`text-small p-3 text-right font-mono font-medium ${
-                              position.pnl >= 0 ? "text-success" : "text-destructive"
-                            }`}
-                          >
-                            <div>
-                              {position.pnl >= 0 ? "+" : ""}${position.pnl.toFixed(2)}
-                            </div>
-                            <div className="text-caption">
-                              {position.pnl >= 0 ? "+" : ""}
-                              {position.pnlPercent.toFixed(1)}%
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                            <p className="text-small font-medium line-clamp-1 group-hover:text-primary transition-colors">
+                              {market.name}
+                            </p>
+                            <p className="text-caption text-muted-foreground mt-0.5">
+                              Vol {market.volume24h && market.volume24h !== "—" ? market.volume24h : market.volume}
+                            </p>
+                          </div>
 
-        {/* Performance Tab */}
-        <TabsContent value="performance" className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-3">
-            {/* Chart */}
-            <Card className="lg:col-span-2">
-              <CardHeader className="flex flex-row items-center justify-between p-3 md:p-4 pb-2">
-                <CardTitle className="text-body md:text-subtitle">Portfolio Value</CardTitle>
-                <div className="flex gap-1">
-                  {["7D", "30D", "90D", "1Y"].map((tf) => (
-                    <Button
-                      key={tf}
-                      variant={timeframe === tf ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => setTimeframe(tf)}
-                      className="h-7 px-2 text-caption"
-                    >
-                      {tf}
-                    </Button>
-                  ))}
-                </div>
-              </CardHeader>
-              <CardContent className="p-3 md:p-4 pt-0">
-                <div className="h-64 md:h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={performanceData}>
-                      <defs>
-                        <linearGradient id="valueGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="oklch(45% 0.15 145)" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="oklch(45% 0.15 145)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 12 }}
-                        className="text-muted-foreground"
-                        fill="currentColor"
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 12 }}
-                        className="text-muted-foreground"
-                        fill="currentColor"
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
-                      />
-                      <Tooltip
-                        content={({ active, payload, label }) => {
-                          if (!active || !payload?.length) return null;
-                          return (
-                            <div className="bg-popover border border-border rounded-md p-3 shadow-lg">
-                              <div className="text-small font-medium">{label}</div>
-                              <div className="text-caption text-primary">
-                                ${(payload[0]?.value as number).toLocaleString()}
+                          {/* Odds */}
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right hidden sm:block">
+                              <div className="text-caption text-muted-foreground">YES / NO</div>
+                              <div className="text-small font-mono font-semibold">
+                                <span className="text-success">{market.yesOdds}¢</span>
+                                {" / "}
+                                <span className="text-destructive">{market.noOdds}¢</span>
                               </div>
                             </div>
-                          );
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke="oklch(45% 0.15 145)"
-                        strokeWidth={2}
-                        fill="url(#valueGradient)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                            {/* YES progress bar */}
+                            <div className="w-20 hidden md:block">
+                              <div className="flex justify-between text-caption text-muted-foreground mb-1">
+                                <span>YES</span>
+                                <span>{market.yesOdds}%</span>
+                              </div>
+                              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-success rounded-full transition-all duration-300"
+                                  style={{ width: `${market.yesOdds}%` }}
+                                />
+                              </div>
+                            </div>
+                            {/* Mobile: just YES odds */}
+                            <div className="sm:hidden text-right">
+                              <div className="text-body font-bold text-success">{market.yesOdds}¢</div>
+                              <div className="text-caption text-muted-foreground">YES</div>
+                            </div>
+                          </div>
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
+          </motion.div>
 
-            {/* Category Breakdown */}
-            <Card>
-              <CardHeader className="p-3 md:p-4 pb-2">
-                <CardTitle className="text-body md:text-subtitle">By Category</CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 md:p-4 pt-0">
-                <div className="h-48 mb-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPieChart>
-                      <Pie
-                        data={categoryData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={70}
-                        dataKey="value"
-                        paddingAngle={2}
-                      >
-                        {categoryData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="space-y-2">
-                  {categoryData.map((cat) => (
-                    <div key={cat.name} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-sm"
-                          style={{ backgroundColor: cat.color }}
-                        />
-                        <span className="text-small">{cat.name}</span>
-                      </div>
-                      <span className="text-small font-medium">{cat.value}%</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Transactions Tab */}
-        <TabsContent value="transactions">
-          <Card>
-            <CardContent className="p-6 md:p-8 text-center">
-              <Wallet className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-subtitle font-semibold mb-2">Connect a Wallet</h3>
-              <p className="text-small text-muted-foreground mb-4 max-w-md mx-auto">
-                Connect your wallet to automatically track transactions and sync your portfolio
-                across platforms.
-              </p>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Connect Wallet
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
         </div>
       </main>
     </div>

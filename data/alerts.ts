@@ -1,56 +1,7 @@
-/**
- * Recent alerts data for dashboard
- * Mock data simulating real-time market alerts
- */
+// recentAlerts removed — dashboard now uses useAlerts hook with real Supabase data
 
 import { Bell, Lightning, TrendUpIcon } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
-
-export interface Alert {
-  id: string;
-  type: string;
-  market: string;
-  description: string;
-  time: string;
-}
-
-export const recentAlerts: Alert[] = [
-  {
-    id: "1",
-    type: "Odds Movement",
-    market: "ETH Price >$3,000",
-    description: "Odds increased by 15% in the last 4 hours",
-    time: "2 hours ago",
-  },
-  {
-    id: "2",
-    type: "Volume Spike",
-    market: "2026 Midterm Elections",
-    description: "Volume increased by 200% in the last hour",
-    time: "4 hours ago",
-  },
-  {
-    id: "3",
-    type: "Arbitrage",
-    market: "Bitcoin >$150k",
-    description: "6.2% arbitrage opportunity detected",
-    time: "5 hours ago",
-  },
-  {
-    id: "4",
-    type: "Price Target",
-    market: "Tesla Stock Performance",
-    description: "Target price reached: $500",
-    time: "8 hours ago",
-  },
-  {
-    id: "5",
-    type: "Odds Movement",
-    market: "Apple AR Glasses Launch",
-    description: "Odds decreased by 12% in the last 6 hours",
-    time: "12 hours ago",
-  },
-];
 
 // Alert management page data
 export interface UserAlert {
@@ -135,9 +86,9 @@ export const alertStats: AlertStat[] = [
   { label: "Triggered Today", value: "5", icon: TrendUpIcon },
 ];
 
+// 'arbitrage' is intentionally excluded — the check engine does not evaluate it
 export const alertTypes = [
   { value: "odds", label: "Odds Movement" },
   { value: "volume", label: "Volume Spike" },
-  { value: "arbitrage", label: "Arbitrage Opportunity" },
   { value: "new", label: "New Market" },
 ];

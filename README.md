@@ -1,4 +1,4 @@
-# PolyPro
+# Polys
 
 Prediction Market Intelligence Platform
 
