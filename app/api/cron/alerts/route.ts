@@ -7,11 +7,11 @@ export const runtime = "nodejs";
 // Scheduling options:
 //   1. Vercel: vercel.json defines schedule "*/5 * * * *". Vercel automatically
 //      passes Authorization: Bearer $CRON_SECRET using the env var set in the project.
-//   2. External scheduler (Replit deployment, cron-job.org, Upstash QStash):
+//   2. External scheduler (cron-job.org, Upstash QStash, or any hosted cron):
 //      Call GET https://<your-domain>/api/cron/alerts
 //      with header  Authorization: Bearer <CRON_SECRET>  every 5 minutes.
 //
-// CRON_SECRET must be set in environment variables / Replit secrets.
+// CRON_SECRET must be set in environment variables.
 
 function isAuthorized(request: Request): boolean {
   const cronSecret = process.env.CRON_SECRET;

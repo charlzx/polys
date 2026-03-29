@@ -1,11 +1,6 @@
 import type { NextConfig } from "next";
 
-const replitDomains = process.env.REPLIT_DOMAINS
-  ? process.env.REPLIT_DOMAINS.split(",").map((d) => d.trim())
-  : [];
-
 const nextConfig: NextConfig = {
-  allowedDevOrigins: replitDomains,
   async redirects() {
     return [
       { source: "/home", destination: "/", permanent: true },
