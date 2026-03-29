@@ -1,115 +1,106 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { motion, useMotionValue, useTransform } from "framer-motion";
 import { AppHeader } from "@/components/AppHeader";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useAuth } from "@/hooks/useAuth";
 import {
   ArrowRight,
   ArrowsCounterClockwise,
+  Bell,
   Broadcast,
   CaretDown,
+  Eye,
   TrendUpIcon,
   TrendDownIcon,
-  Wallet,
-  ChartLine,
-  BellRinging,
-  Lightning,
 } from "@phosphor-icons/react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { quickStats } from "@/data/quickStats";
-import { recentAlerts } from "@/data/alerts";
+import { useMarkets } from "@/services/polymarket";
+import { useMarketWebSocket } from "@/hooks/useMarketWebSocket";
+import { useUnifiedMarkets } from "@/hooks/useUnifiedMarkets";
+import { polymarketToUnified } from "@/services/unified";
+import type { UnifiedMarket } from "@/services/unified";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { KalshiPriceChart } from "@/components/KalshiPriceChart";
+import { WhaleActivityFeed } from "@/components/WhaleActivityFeed";
+import { LiveFeed } from "@/components/LiveFeed";
+import { useMarketIntelligence } from "@/services/ai";
+import { Sparkle } from "@phosphor-icons/react";
+import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { useAlerts } from "@/hooks/useAlerts";
+import { useArbitrage } from "@/hooks/useArbitrage";
 
-// Mock hooks - replace with your actual implementation
-const useUser = () => {
-  return {
-    name: "Alex Chen",
-    tier: "pro",
-  };
-};
+function formatEndDate(dateStr: string): string {
+  if (!dateStr) return "";
+  try {
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
 
-const useMarkets = ({ limit, active }: { limit?: number; active?: boolean }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [data, setData] = useState<{ id: string; question: string; category: string; yesOdds: number; noOdds: number; change: number; volume: number }[]>([]);
+function DashboardKalshiDialog({ market, open, onClose }: { market: UnifiedMarket; open: boolean; onClose: () => void }) {
+  const formattedEnd = formatEndDate(market.endDate);
+  const ticker = market.id.replace(/^kalshi-/, "");
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base leading-snug">{market.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-caption">{market.category}</Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-500/40 text-blue-500">Kalshi</Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="text-center p-3 rounded-lg bg-success/10">
+              <div className="text-caption text-muted-foreground mb-1">YES</div>
+              <div className="text-title font-bold text-success">{market.yesOdds}%</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-destructive/10">
+              <div className="text-caption text-muted-foreground mb-1">NO</div>
+              <div className="text-title font-bold text-destructive">{market.noOdds}%</div>
+            </div>
+          </div>
+          {open && <KalshiPriceChart ticker={ticker} days={7} />}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+              <span>Volume</span>
+              <span className="font-medium text-foreground">{market.volume}</span>
+            </div>
+            {formattedEnd && (
+              <div className="flex items-center justify-between text-small text-muted-foreground p-3 rounded-lg bg-secondary/50">
+                <span>Closes</span>
+                <span className="font-medium text-foreground">{formattedEnd}</span>
+              </div>
+            )}
+          </div>
+          {market.externalUrl && (
+            <Button variant="secondary" size="sm" className="w-full" asChild>
+              <a href={market.externalUrl} target="_blank" rel="noopener noreferrer">
+                Trade on Kalshi
+                <ArrowRight weight="bold" className="ml-2 h-4 w-4" />
+              </a>
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-  useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setData([
-        {
-          id: "1",
-          question: "Will Bitcoin reach $100k in 2025?",
-          category: "Crypto",
-          yesOdds: 67,
-          noOdds: 33,
-          volume: 2500000,
-          change: 5.2,
-        },
-        {
-          id: "2",
-          question: "Will AI replace 25% of jobs by 2030?",
-          category: "Technology",
-          yesOdds: 45,
-          noOdds: 55,
-          volume: 1800000,
-          change: -2.3,
-        },
-        {
-          id: "3",
-          question: "Will Tesla stock hit $500 in 2025?",
-          category: "Finance",
-          yesOdds: 52,
-          noOdds: 48,
-          volume: 3200000,
-          change: 8.1,
-        },
-        {
-          id: "4",
-          question: "Will there be a recession in 2025?",
-          category: "Economics",
-          yesOdds: 38,
-          noOdds: 62,
-          volume: 2100000,
-          change: -4.5,
-        },
-        {
-          id: "5",
-          question: "Will SpaceX land on Mars by 2030?",
-          category: "Space",
-          yesOdds: 41,
-          noOdds: 59,
-          volume: 1500000,
-          change: 3.7,
-        },
-      ]);
-      setIsLoading(false);
-    }, 1000);
-  }, []);
-
-  return {
-    data: limit ? data.slice(0, limit) : data,
-    isLoading,
-    error: null,
-    refetch: () => {
-      setIsLoading(true);
-      setTimeout(() => setIsLoading(false), 500);
-    },
-  };
-};
-
-const useMarketWebSocket = (marketIds: string[]) => {
-  // Use a ref-based approach to avoid setState in effect issue
-  const [isConnected] = useState(() => marketIds.length > 0);
-
-  return { isConnected };
-};
-
-// Helper function
 const getGreeting = () => {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
@@ -117,7 +108,6 @@ const getGreeting = () => {
   return "Good evening";
 };
 
-// Market Skeleton Component
 const MarketSkeleton = () => (
   <div className="space-y-3">
     <Skeleton className="h-4 w-3/4" />
@@ -129,7 +119,6 @@ const MarketSkeleton = () => (
   </div>
 );
 
-// CollapsibleCard Component
 interface CollapsibleCardProps {
   title: string;
   children: React.ReactNode;
@@ -188,17 +177,8 @@ const CollapsibleCard = ({
   );
 };
 
-// SwipeableMarketCard Component
-interface SwipeableMarketCardProps {
-  market: {
-    id: string;
-    question: string;
-    category: string;
-    yesOdds: number;
-    noOdds: number;
-    volume: number;
-    change: number;
-  };
+interface MarketCardProps {
+  market: UnifiedMarket;
   onSwipeRight: () => void;
   onSwipeLeft: () => void;
 }
@@ -207,8 +187,9 @@ const SwipeableMarketCard = ({
   market,
   onSwipeRight,
   onSwipeLeft,
-}: SwipeableMarketCardProps) => {
+}: MarketCardProps) => {
   const x = useMotionValue(0);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const background = useTransform(
     x,
     [-100, 0, 100],
@@ -216,8 +197,12 @@ const SwipeableMarketCard = ({
   );
   const rightOpacity = useTransform(x, [0, 100], [0, 1]);
   const leftOpacity = useTransform(x, [-100, 0], [1, 0]);
+  const isKalshi = market.source === "kalshi";
 
-  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, { offset }: { offset: { x: number; y: number } }) => {
+  const handleDragEnd = (
+    _event: MouseEvent | TouchEvent | PointerEvent,
+    { offset }: { offset: { x: number; y: number } }
+  ) => {
     if (offset.x > 100) {
       onSwipeRight();
       x.set(0);
@@ -227,96 +212,165 @@ const SwipeableMarketCard = ({
     }
   };
 
+  const cardInner = (
+    <Card className="hover:bg-secondary/50 transition-base cursor-pointer border-0 shadow-none">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-body font-medium leading-tight line-clamp-2 mb-2">
+              {market.name}
+            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="secondary" className="text-caption">
+                {market.category}
+              </Badge>
+              {isKalshi ? (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-500/40 text-blue-500">
+                  Kalshi
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-500/40 text-purple-500">
+                  Polymarket
+                </Badge>
+              )}
+            </div>
+          </div>
+          {market.change24h !== 0 && (
+            <div
+              className={`text-small font-medium shrink-0 flex items-center gap-0.5 ${
+                market.change24h >= 0 ? "text-success" : "text-destructive"
+              }`}
+            >
+              {market.change24h >= 0 ? (
+                <TrendUpIcon className="h-3 w-3" />
+              ) : (
+                <TrendDownIcon className="h-3 w-3" />
+              )}
+              {market.change24h >= 0 ? "+" : ""}
+              {market.change24h}%
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 mt-3">
+          <div className="flex-1 text-center p-2 rounded bg-success/10">
+            <div className="text-small text-muted-foreground mb-0.5">YES</div>
+            <div className="text-body font-bold text-success">{market.yesOdds}¢</div>
+          </div>
+          <div className="flex-1 text-center p-2 rounded bg-destructive/10">
+            <div className="text-small text-muted-foreground mb-0.5">NO</div>
+            <div className="text-body font-bold text-destructive">{market.noOdds}¢</div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between mt-3 text-small text-muted-foreground">
+          <span>Volume</span>
+          <span className="font-medium">{market.volume}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <div className="relative">
-      {/* Background indicators */}
-      <motion.div
-        className="absolute inset-0 rounded-lg overflow-hidden"
-        style={{ background }}
-      >
+    <>
+      <div className="relative">
         <motion.div
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-white font-medium text-small"
-          style={{ opacity: leftOpacity }}
+          className="absolute inset-0 rounded-lg overflow-hidden"
+          style={{ background }}
         >
-          Dismiss
+          <motion.div
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-white font-medium text-small"
+            style={{ opacity: leftOpacity }}
+          >
+            Dismiss
+          </motion.div>
+          <motion.div
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-white font-medium text-small"
+            style={{ opacity: rightOpacity }}
+          >
+            Add to Watchlist
+          </motion.div>
         </motion.div>
+
         <motion.div
-          className="absolute right-4 top-1/2 -translate-y-1/2 text-white font-medium text-small"
-          style={{ opacity: rightOpacity }}
+          drag="x"
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.7}
+          onDragEnd={handleDragEnd}
+          style={{ x }}
+          className="relative bg-card"
         >
-          Add to Watchlist
+          {isKalshi ? (
+            <div onClick={() => setDialogOpen(true)}>{cardInner}</div>
+          ) : (
+            <Link href={`/markets/${market.id}`}>{cardInner}</Link>
+          )}
         </motion.div>
-      </motion.div>
-
-      {/* Market card */}
-      <motion.div
-        drag="x"
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.7}
-        onDragEnd={handleDragEnd}
-        style={{ x }}
-        className="relative bg-card"
-      >
-        <Link href={`/markets/${market.id}`}>
-          <Card className="hover:bg-secondary/50 transition-base cursor-pointer border-0 shadow-none">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-body font-medium leading-tight line-clamp-2 mb-2">
-                    {market.question}
-                  </p>
-                  <Badge variant="secondary" className="text-caption">
-                    {market.category}
-                  </Badge>
-                </div>
-                <div
-                  className={`text-small font-medium shrink-0 ${
-                    market.change >= 0 ? "text-success" : "text-destructive"
-                  }`}
-                >
-                  {market.change >= 0 ? "+" : ""}
-                  {market.change}%
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 mt-3">
-                <div className="flex-1 text-center p-2 rounded bg-success/10">
-                  <div className="text-small text-muted-foreground mb-0.5">YES</div>
-                  <div className="text-body font-bold text-success">{market.yesOdds}¢</div>
-                </div>
-                <div className="flex-1 text-center p-2 rounded bg-destructive/10">
-                  <div className="text-small text-muted-foreground mb-0.5">NO</div>
-                  <div className="text-body font-bold text-destructive">{market.noOdds}¢</div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-3 text-small text-muted-foreground">
-                <span>Volume</span>
-                <span className="font-medium">
-                  ${(market.volume / 1000000).toFixed(1)}M
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </motion.div>
-    </div>
+      </div>
+      {isKalshi && (
+        <DashboardKalshiDialog market={market} open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      )}
+    </>
   );
 };
 
-// Main Dashboard Component
 export default function DashboardPage() {
-  const user = useUser();
-  const { data: markets, isLoading, error, refetch } = useMarkets({ limit: 5, active: true });
+  const { data: markets, isLoading: polyLoading, error: polyError, refetch: polyRefetch } = useMarkets({ limit: 20, active: true });
+  const { data: unifiedMarkets, isLoading: unifiedLoading, error: unifiedError, refetch: unifiedRefetch } = useUnifiedMarkets({ limit: 100 });
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
-  
-  const marketIds = useMemo(() => markets?.map((m) => m.id) || [], [markets]);
-  const { isConnected } = useMarketWebSocket(marketIds);
+  const { user } = useAuth();
 
-  // Use markets data directly since we don't have real WebSocket updates yet
-  const liveMarkets = useMemo(() => markets || [], [markets]);
+  const isLoading = polyLoading || unifiedLoading;
+  const error = polyError && unifiedError;
+  const refetch = () => { polyRefetch(); unifiedRefetch(); };
 
-  // Show loading while checking auth
+  const { stats, isLoading: statsLoading } = useDashboardStats(user?.id);
+  const { alerts: userAlerts, isLoading: alertsLoading } = useAlerts(user?.id);
+  const { data: arbData } = useArbitrage();
+
+  // Last 5 active or triggered alerts sorted by most recent activity
+  const recentAlerts = useMemo(() => {
+    return [...userAlerts]
+      .filter((a) => a.status === "active" || a.status === "triggered")
+      .sort((a, b) => {
+        const aTime = a.last_triggered_at ?? a.created_at;
+        const bTime = b.last_triggered_at ?? b.created_at;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      })
+      .slice(0, 5);
+  }, [userAlerts]);
+
+  const tokenPairs = useMemo(
+    () =>
+      (markets ?? [])
+        .filter((m) => m.yesTokenId)
+        .map((m) => ({ marketId: m.id, yesTokenId: m.yesTokenId! })),
+    [markets]
+  );
+  const { isConnected, applyUpdatesToMarkets } = useMarketWebSocket({
+    tokenPairs,
+    marketIds: markets?.map((m) => m.id) ?? [],
+  });
+
+  const livePolyUnified = useMemo(
+    () => (markets ? applyUpdatesToMarkets(markets).map(polymarketToUnified) : []),
+    [markets, applyUpdatesToMarkets]
+  );
+
+  const liveMarkets = useMemo<UnifiedMarket[]>(() => {
+    const livePolyMap = new Map(livePolyUnified.map((m) => [m.id, m]));
+    return (unifiedMarkets ?? []).map((m) => livePolyMap.get(m.id) ?? m);
+  }, [unifiedMarkets, livePolyUnified]);
+
+  const livePolyMarketsForIntelligence = useMemo(
+    () => (markets ? applyUpdatesToMarkets(markets) : []),
+    [markets, applyUpdatesToMarkets]
+  );
+
+  const { data: intelligence, isLoading: intelligenceLoading } = useMarketIntelligence(
+    livePolyMarketsForIntelligence.slice(0, 10)
+  );
+
   if (!shouldShowContent) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -330,213 +384,343 @@ export default function DashboardPage() {
       <AppHeader />
       <main className="pt-[120px] md:pt-[88px] pb-20 md:pb-0 min-h-screen">
         <div className="container max-w-screen-2xl py-6 md:py-8 space-y-6 md:space-y-8">
-      {/* Welcome Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col gap-2"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <h1 className="text-title md:text-display font-bold">
-            {getGreeting()}, {user?.name?.split(" ")[0] || "Trader"}
-          </h1>
-          <Badge variant="secondary" className="capitalize text-caption w-fit">
-            {user?.tier || "Free"}
-          </Badge>
-        </div>
-        <p className="text-small text-muted-foreground">
-          Here&apos;s what&apos;s happening in your markets today.
-        </p>
-      </motion.div>
 
-      {/* Quick Stats */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-        className="grid grid-cols-2 gap-4 lg:grid-cols-4"
-      >
-        {quickStats.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
-            >
-              <Card>
-                <CardContent className="p-4 md:p-5">
-                  <div className="flex items-center justify-between mb-2 gap-2">
-                    <Icon weight="duotone" className="h-5 w-5 text-muted-foreground shrink-0" />
-                    {stat.change && (
-                      <span
-                        className={`text-small font-medium truncate ${
-                          stat.positive ? "text-success" : "text-destructive"
-                        }`}
-                      >
-                        {stat.change}
-                      </span>
-                    )}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex flex-col gap-2"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <h1 className="text-title md:text-display font-bold">
+                {getGreeting()}, {user?.name?.split(" ")[0] ?? "Trader"}
+              </h1>
+              <Badge variant="secondary" className="capitalize text-caption w-fit">
+                {user?.tier ?? "free"}
+              </Badge>
+            </div>
+            <p className="text-small text-muted-foreground">
+              Here&apos;s what&apos;s happening in your markets today.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className="grid grid-cols-2 gap-4 lg:grid-cols-3"
+          >
+            {[
+              {
+                label: "Markets Watched",
+                value: statsLoading ? "—" : String(stats.watchedCount),
+                icon: Eye,
+                href: "/watchlist",
+              },
+              {
+                label: "Active Alerts",
+                value: statsLoading ? "—" : String(stats.activeAlertCount),
+                icon: Bell,
+                href: "/alerts",
+              },
+              {
+                label: "Triggered (24h)",
+                value: statsLoading ? "—" : String(stats.triggeredTodayCount),
+                icon: TrendUpIcon,
+                href: "/alerts",
+              },
+            ].map((stat, index) => {
+              const Icon = stat.icon;
+              return (
+                <motion.div
+                  key={stat.label}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
+                >
+                  <Link href={stat.href}>
+                    <Card className="hover:bg-secondary/50 transition-base cursor-pointer">
+                      <CardContent className="p-4 md:p-5">
+                        <div className="flex items-center justify-between mb-2 gap-2">
+                          <Icon weight="duotone" className="h-5 w-5 text-muted-foreground shrink-0" />
+                        </div>
+                        <div className="text-title md:text-display font-bold truncate">
+                          {statsLoading ? (
+                            <Skeleton className="h-7 w-12" />
+                          ) : (
+                            stat.value
+                          )}
+                        </div>
+                        <div className="text-small text-muted-foreground mt-1 truncate">{stat.label}</div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+            className="grid gap-6 lg:gap-8 lg:grid-cols-3"
+          >
+            <div className="lg:col-span-2 min-w-0 overflow-hidden">
+              <CollapsibleCard
+                title="Trending Markets"
+                badge={
+                  isConnected && (
+                    <Badge variant="secondary" className="text-caption gap-1 px-2 py-0.5">
+                      <Broadcast weight="fill" className="h-2.5 w-2.5 text-success animate-pulse" />
+                      Live
+                    </Badge>
+                  )
+                }
+                actions={
+                  !isLoading && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        refetch();
+                      }}
+                    >
+                      <ArrowsCounterClockwise weight="bold" className="h-3.5 w-3.5" />
+                    </Button>
+                  )
+                }
+              >
+                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                  {isLoading ? (
+                    [...Array(5)].map((_, i) => <MarketSkeleton key={i} />)
+                  ) : error ? (
+                    <div className="p-6 text-center">
+                      <p className="text-small text-muted-foreground mb-3">
+                        Failed to load markets
+                      </p>
+                      <Button variant="outline" size="sm" onClick={() => refetch()}>
+                        Retry
+                      </Button>
+                    </div>
+                  ) : liveMarkets.length > 0 ? (
+                    liveMarkets.map((market) => (
+                      <div key={market.id} className="min-w-0">
+                        <SwipeableMarketCard
+                          market={market}
+                          onSwipeRight={() => console.log("Watchlist:", market.id)}
+                          onSwipeLeft={() => console.log("Dismissed:", market.id)}
+                        />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-6 text-center text-muted-foreground text-small">
+                      No markets available
+                    </div>
+                  )}
+                </div>
+
+                <Button variant="ghost" size="sm" asChild className="w-full mt-4">
+                  <Link href="/markets" className="text-primary">
+                    View All Markets <ArrowRight weight="bold" className="ml-1 h-4 w-4" />
+                  </Link>
+                </Button>
+              </CollapsibleCard>
+            </div>
+
+            <div className="space-y-6">
+              <CollapsibleCard
+                title="Recent Alerts"
+                defaultOpen={true}
+                actions={
+                  <Button variant="ghost" size="sm" asChild className="h-8 px-3 hidden md:flex">
+                    <Link href="/alerts" className="text-primary text-small">
+                      View All
+                    </Link>
+                  </Button>
+                }
+              >
+                <div className="space-y-3 max-h-[280px] overflow-y-auto">
+                  {alertsLoading ? (
+                    [...Array(3)].map((_, i) => (
+                      <div key={i} className="space-y-2 p-3 rounded-lg bg-secondary/50">
+                        <Skeleton className="h-4 w-1/3" />
+                        <Skeleton className="h-4 w-3/4" />
+                      </div>
+                    ))
+                  ) : recentAlerts.length === 0 ? (
+                    <div className="p-4 text-center">
+                      <p className="text-small text-muted-foreground mb-2">No alerts yet</p>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href="/alerts">Create your first alert</Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    recentAlerts.map((alert) => {
+                      const typeLabel =
+                        alert.alert_type === "odds" ? "Odds Alert"
+                        : alert.alert_type === "volume" ? "Volume Alert"
+                        : alert.alert_type === "new" ? "New Market"
+                        : "Alert";
+                      const timeStr = alert.last_triggered_at
+                        ? (() => {
+                            const diff = Date.now() - new Date(alert.last_triggered_at).getTime();
+                            const m = Math.floor(diff / 60_000);
+                            if (m < 60) return `${m}m ago`;
+                            const h = Math.floor(m / 60);
+                            if (h < 24) return `${h}h ago`;
+                            return `${Math.floor(h / 24)}d ago`;
+                          })()
+                        : "Never triggered";
+                      return (
+                        <motion.div
+                          key={alert.id}
+                          whileHover={{ scale: 1.01 }}
+                          className="p-3 md:p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-base cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <Badge
+                              variant="secondary"
+                              className={`text-caption px-2 py-0.5 ${
+                                alert.status === "triggered" ? "text-success" : ""
+                              }`}
+                            >
+                              {typeLabel}
+                            </Badge>
+                            <span className="text-small text-muted-foreground">{timeStr}</span>
+                          </div>
+                          <p className="text-body font-medium truncate">
+                            {alert.market_name ?? alert.name}
+                          </p>
+                          <p className="text-small text-muted-foreground line-clamp-2 mt-1">
+                            {alert.condition_text ?? alert.name}
+                          </p>
+                        </motion.div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <Button variant="ghost" size="sm" asChild className="w-full mt-4 md:hidden">
+                  <Link href="/alerts" className="text-primary">
+                    View All Alerts
+                  </Link>
+                </Button>
+              </CollapsibleCard>
+
+              {/* Arbitrage condensed preview */}
+              <CollapsibleCard title="Arbitrage Opps" defaultOpen={true}>
+                {arbData?.opportunities?.filter((o) => o.status === "active").slice(0, 2).length ? (
+                  <div className="space-y-2">
+                    {arbData.opportunities
+                      .filter((o) => o.status === "active")
+                      .slice(0, 2)
+                      .map((opp) => (
+                        <div
+                          key={opp.id}
+                          className="p-3 rounded-lg bg-secondary/50 flex items-center justify-between gap-2"
+                        >
+                          <p className="text-small font-medium line-clamp-1 flex-1">{opp.market}</p>
+                          <Badge variant="secondary" className="text-caption text-success shrink-0">
+                            +{opp.profit.toFixed(1)}%
+                          </Badge>
+                        </div>
+                      ))}
+                    <Button variant="ghost" size="sm" asChild className="w-full">
+                      <Link href="/arbitrage" className="text-primary">View all</Link>
+                    </Button>
                   </div>
-                  <div className="text-title md:text-display font-bold truncate">{stat.value}</div>
-                  <div className="text-small text-muted-foreground mt-1 truncate">{stat.label}</div>
+                ) : (
+                  <p className="text-small text-muted-foreground text-center py-3">
+                    No active opportunities right now.
+                  </p>
+                )}
+              </CollapsibleCard>
+
+              {/* Live Feed */}
+              <CollapsibleCard
+                title="Live Feed"
+                defaultOpen={true}
+                badge={
+                  <Badge variant="secondary" className="text-caption gap-1 px-2 py-0.5">
+                    <Broadcast weight="fill" className="h-2.5 w-2.5 text-success animate-pulse" />
+                    Live
+                  </Badge>
+                }
+              >
+                <LiveFeed limit={12} showHeader={false} />
+                <Button variant="ghost" size="sm" asChild className="w-full mt-3">
+                  <Link href="/whales" className="text-primary">
+                    View Whale Activity
+                  </Link>
+                </Button>
+              </CollapsibleCard>
+
+              {/* Market Intelligence widget */}
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2 p-4 md:p-5 pb-3">
+                  <Sparkle className="h-4 w-4 text-primary" weight="fill" />
+                  <CardTitle className="text-subtitle">Market Intelligence</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 md:p-5 pt-0">
+                  {intelligenceLoading ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="space-y-1.5">
+                          <Skeleton className="h-3 w-full" />
+                          <Skeleton className="h-3 w-4/5" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : intelligence && intelligence.length > 0 ? (
+                    <div className="space-y-3">
+                      {intelligence.slice(0, 3).map((item) => (
+                        <div key={item.marketId} className="p-3 rounded-lg bg-secondary/50 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge
+                              variant="secondary"
+                              className={`text-caption px-2 py-0.5 ${
+                                item.signal === "bullish"
+                                  ? "text-success"
+                                  : item.signal === "bearish"
+                                  ? "text-destructive"
+                                  : ""
+                              }`}
+                            >
+                              {item.signal}
+                            </Badge>
+                            <Badge variant="outline" className="text-caption px-2 py-0.5">
+                              {item.category}
+                            </Badge>
+                          </div>
+                          <p className="text-small font-medium line-clamp-1">{item.marketName}</p>
+                          <p className="text-caption text-muted-foreground line-clamp-2">{item.insight}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 py-4 text-center">
+                      <Sparkle className="h-6 w-6 text-muted-foreground/50" weight="duotone" />
+                      <p className="text-small font-medium">AI Intelligence unavailable</p>
+                        <p className="text-caption text-muted-foreground">
+                          Market intelligence is temporarily unavailable. Please try again later.
+                        </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            </motion.div>
-          );
-        })}
-      </motion.div>
 
-      {/* Main Content Grid */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.2 }}
-        className="grid gap-6 lg:gap-8 lg:grid-cols-3"
-      >
-        {/* Trending Markets */}
-        <div className="lg:col-span-2 min-w-0 overflow-hidden">
-          <CollapsibleCard
-            title="Trending Markets"
-            badge={
-              isConnected && (
-                <Badge variant="secondary" className="text-caption gap-1 px-2 py-0.5">
-                  <Broadcast weight="fill" className="h-2.5 w-2.5 text-success animate-pulse" />
-                  Live
-                </Badge>
-              )
-            }
-            actions={
-              !isLoading && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    refetch();
-                  }}
-                >
-                  <ArrowsCounterClockwise weight="bold" className="h-3.5 w-3.5" />
-                </Button>
-              )
-            }
-          >
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-              {isLoading ? (
-                [...Array(5)].map((_, i) => <MarketSkeleton key={i} />)
-              ) : error ? (
-                <div className="p-6 text-center">
-                  <p className="text-small text-muted-foreground mb-3">
-                    Failed to load markets
-                  </p>
-                  <Button variant="outline" size="sm" onClick={() => refetch()}>
-                    Retry
-                  </Button>
-                </div>
-              ) : liveMarkets && liveMarkets.length > 0 ? (
-                liveMarkets.map((market) => (
-                  <div key={market.id} className="min-w-0">
-                    <SwipeableMarketCard
-                      market={market}
-                      onSwipeRight={() => console.log("Added to watchlist:", market.id)}
-                      onSwipeLeft={() => console.log("Dismissed:", market.id)}
-                    />
-                  </div>
-                ))
-              ) : (
-                <div className="p-6 text-center text-muted-foreground text-small">
-                  No markets available
-                </div>
-              )}
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <WhaleActivityFeed limit={6} showHeader={true} />
+                </CardContent>
+              </Card>
             </div>
+          </motion.div>
 
-            <Button variant="ghost" size="sm" asChild className="w-full mt-4">
-              <Link href="/markets" className="text-primary">
-                View All Markets <ArrowRight weight="bold" className="ml-1 h-4 w-4" />
-              </Link>
-            </Button>
-          </CollapsibleCard>
         </div>
-
-        {/* Right Sidebar */}
-        <div className="space-y-6">
-          {/* Recent Alerts */}
-          <CollapsibleCard
-            title="Recent Alerts"
-            defaultOpen={true}
-            actions={
-              <Button variant="ghost" size="sm" asChild className="h-8 px-3 hidden md:flex">
-                <Link href="/alerts" className="text-primary text-small">
-                  View All
-                </Link>
-              </Button>
-            }
-          >
-            <div className="space-y-3 max-h-[280px] overflow-y-auto">
-              {recentAlerts.map((alert) => (
-                <motion.div
-                  key={alert.id}
-                  whileHover={{ scale: 1.01 }}
-                  className="p-3 md:p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-base cursor-pointer"
-                >
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <Badge variant="secondary" className="text-caption px-2 py-0.5">
-                      {alert.type}
-                    </Badge>
-                    <span className="text-small text-muted-foreground">
-                      {alert.time}
-                    </span>
-                  </div>
-                  <p className="text-body font-medium truncate">{alert.market}</p>
-                  <p className="text-small text-muted-foreground line-clamp-2 mt-1">
-                    {alert.description}
-                  </p>
-                </motion.div>
-              ))}
-            </div>
-
-            <Button variant="ghost" size="sm" asChild className="w-full mt-4 md:hidden">
-              <Link href="/alerts" className="text-primary">
-                View All Alerts
-              </Link>
-            </Button>
-          </CollapsibleCard>
-
-          {/* Arbitrage Opportunities Preview */}
-          <Card className="relative overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between p-4 md:p-5 pb-3">
-              <CardTitle className="text-subtitle">Arbitrage Opps</CardTitle>
-              <Badge className="text-caption">Pro</Badge>
-            </CardHeader>
-            <CardContent className="p-4 md:p-5 pt-0">
-              <div className="space-y-3 filter blur-sm">
-                <div className="p-3 md:p-4 rounded-lg bg-secondary/50">
-                  <p className="text-body font-medium">Bitcoin &gt;$100k</p>
-                  <p className="text-small text-success">8.3% profit potential</p>
-                </div>
-                <div className="p-3 md:p-4 rounded-lg bg-secondary/50">
-                  <p className="text-body font-medium">ETH &gt;$4,000</p>
-                  <p className="text-small text-success">5.2% profit potential</p>
-                </div>
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-[2px]">
-                <div className="text-center p-6">
-                  <p className="text-body font-medium mb-3">
-                    Upgrade to Pro to unlock
-                  </p>
-                  <Button size="sm" asChild>
-                    <Link href="/pricing">View Plans</Link>
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </motion.div>
-    </div>
       </main>
     </div>
   );

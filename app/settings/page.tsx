@@ -1,23 +1,28 @@
 "use client";
 
-import { useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useAuth } from "@/hooks/useAuth";
 import { AppHeader } from "@/components/AppHeader";
+import { createClient } from "@/lib/supabase/client";
 import {
   User,
   Shield,
   Bell,
   CreditCard,
   Palette,
-  CaretRight,
-  CaretLeft,
   Check,
   Sun,
   Moon,
+  Monitor,
   Warning,
+  SignOut,
+  Lock,
+  Timer,
+  TextAa,
+  ArrowsDownUp,
 } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,33 +48,38 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTheme } from "next-themes";
+import { useToast } from "@/hooks/use-toast";
 
-// Settings sections
-const settingsSections = [
-  { id: "profile", label: "Profile", description: "Manage your account details", icon: User },
-  {
-    id: "security",
-    label: "Security",
-    description: "Two-factor authentication",
-    icon: Shield,
-  },
-  {
-    id: "notifications",
-    label: "Notifications",
-    description: "Email and push preferences",
-    icon: Bell,
-  },
-  {
-    id: "billing",
-    label: "Billing",
-    description: "Subscription and payments",
-    icon: CreditCard,
-  },
-  { id: "appearance", label: "Appearance", description: "Theme settings", icon: Palette },
+const NAV_SECTIONS = [
+  { id: "profile", label: "Profile", description: "Account details", icon: User },
+  { id: "security", label: "Security", description: "Password & sessions", icon: Shield },
+  { id: "notifications", label: "Notifications", description: "Email & push preferences", icon: Bell },
+  { id: "billing", label: "Billing", description: "Subscription & plans", icon: CreditCard },
+  { id: "appearance", label: "Appearance", description: "Theme & display", icon: Palette },
+] as const;
+
+type SectionId = (typeof NAV_SECTIONS)[number]["id"];
+
+const TIMEZONES = [
+  { value: "America/New_York", label: "Eastern Time (ET)" },
+  { value: "America/Chicago", label: "Central Time (CT)" },
+  { value: "America/Denver", label: "Mountain Time (MT)" },
+  { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
+  { value: "America/Anchorage", label: "Alaska Time (AKT)" },
+  { value: "Pacific/Honolulu", label: "Hawaii Time (HST)" },
+  { value: "Europe/London", label: "London (GMT/BST)" },
+  { value: "Europe/Paris", label: "Paris (CET/CEST)" },
+  { value: "Europe/Berlin", label: "Berlin (CET/CEST)" },
+  { value: "Asia/Dubai", label: "Dubai (GST)" },
+  { value: "Asia/Kolkata", label: "India (IST)" },
+  { value: "Asia/Singapore", label: "Singapore (SGT)" },
+  { value: "Asia/Tokyo", label: "Tokyo (JST)" },
+  { value: "Asia/Seoul", label: "Seoul (KST)" },
+  { value: "Australia/Sydney", label: "Sydney (AEST)" },
+  { value: "UTC", label: "UTC" },
 ];
 
-// Subscription plans
-const plans = [
+const PLANS = [
   {
     id: "free",
     name: "Explorer",
@@ -83,549 +93,789 @@ const plans = [
     price: "$79",
     period: "/month",
     popular: true,
-    features: ["Unlimited alerts", "Full historical data", "All markets", "Mobile apps"],
+    features: ["Unlimited alerts", "Full historical data", "All markets", "Whale tracking"],
   },
   {
-    id: "elite",
+    id: "premium",
     name: "Professional",
     price: "$199",
     period: "/month",
-    features: [
-      "Real-time arbitrage",
-      "Cross-platform scanning",
-      "API access",
-      "Priority support",
-    ],
+    features: ["Real-time arbitrage", "Cross-platform scanning", "API access", "Priority support"],
   },
-];
+] as const;
+
+function useLocalStorage<T>(key: string, defaultValue: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(defaultValue);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored !== null) setValue(JSON.parse(stored) as T);
+    } catch { /* ignore */ }
+  }, [key]);
+
+  const set = useCallback(
+    (v: T) => {
+      setValue(v);
+      try {
+        localStorage.setItem(key, JSON.stringify(v));
+      } catch { /* ignore */ }
+    },
+    [key]
+  );
+
+  return [value, set];
+}
 
 function SettingsContent() {
   const searchParams = useSearchParams();
-  const activeSection = searchParams?.get("tab") || null;
+  const router = useRouter();
+  const rawTab = searchParams?.get("tab");
+  const activeSection: SectionId = (
+    rawTab && NAV_SECTIONS.some((s) => s.id === rawTab) ? rawTab : "profile"
+  ) as SectionId;
+  const hasExplicitTab = !!rawTab;
+
   const { theme, setTheme } = useTheme();
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
+  const { user, logout } = useAuth();
+  const { toast } = useToast();
+  const supabase = useMemo(() => createClient(), []);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
-  // Mock user data
-  const [userTier, setUserTier] = useState("pro");
-  const [profile, setProfile] = useState({
-    name: "Alex Chen",
-    email: "alex@example.com",
-    timezone: "America/New_York",
-  });
+  const [profileName, setProfileName] = useState("");
+  const [profileTimezone, setProfileTimezone] = useState("UTC");
+  const [profileEmail, setProfileEmail] = useState("");
 
-  const [notifications, setNotifications] = useState({
-    alertsEmail: true,
-    alertsPush: true,
-    portfolioDaily: false,
-    portfolioWeekly: true,
-    productUpdates: true,
-    marketing: false,
-  });
+  const [notifEmailAlerts, setNotifEmailAlerts] = useState(true);
+  const [notifDailyDigest, setNotifDailyDigest] = useState(true);
+  const [notifWeeklySummary, setNotifWeeklySummary] = useState(true);
 
-  // Show loading while checking auth
+  const [density, setDensity] = useLocalStorage<"comfortable" | "compact">("polys-density", "comfortable");
+  const [fontSize, setFontSize] = useLocalStorage<"normal" | "large">("polys-font-size", "normal");
+
+  // True when DB migrations haven't been run yet
+  const [migrationNeeded, setMigrationNeeded] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setProfileName(user.name || "");
+    setProfileEmail(user.email || "");
+  }, [user]);
+
+  const loadProfilePrefs = useCallback(async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("timezone, email_alerts_enabled, portfolio_daily_digest, weekly_summary")
+      .eq("id", user.id)
+      .single();
+
+    if (error) {
+      // 42P01 = undefined_table; message check covers PostgREST wrapping
+      const isMissing =
+        error.code === "42P01" ||
+        (error.message?.toLowerCase?.().includes("relation") &&
+          error.message?.toLowerCase?.().includes("does not exist"));
+      if (isMissing) setMigrationNeeded(true);
+      return;
+    }
+
+    if (data) {
+      if (data.timezone) setProfileTimezone(data.timezone);
+      if (data.email_alerts_enabled !== null) setNotifEmailAlerts(data.email_alerts_enabled ?? true);
+      if (data.portfolio_daily_digest !== null) setNotifDailyDigest(data.portfolio_daily_digest ?? true);
+      if (data.weekly_summary !== null) setNotifWeeklySummary(data.weekly_summary ?? true);
+    }
+  }, [supabase, user?.id]);
+
+  useEffect(() => {
+    loadProfilePrefs();
+  }, [loadProfilePrefs]);
+
+  const handleSaveProfile = async () => {
+    if (!user?.id) return;
+    if (migrationNeeded) {
+      toast({ title: "Database not set up", description: "Run the migration SQL first (see the banner above).", variant: "destructive" });
+      return;
+    }
+    setIsSavingProfile(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ name: profileName, timezone: profileTimezone })
+      .eq("id", user.id);
+    if (error) {
+      const isTable = error.code === "42P01" || error.message?.includes("does not exist");
+      if (isTable) setMigrationNeeded(true);
+      toast({ title: isTable ? "Database not set up" : "Error saving profile", description: isTable ? "Run the migration SQL first (see the banner above)." : error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Profile saved", description: "Your display name and timezone have been updated." });
+    }
+    setIsSavingProfile(false);
+  };
+
+  const handleToggle = useCallback(
+    async (field: "email_alerts_enabled" | "portfolio_daily_digest" | "weekly_summary", value: boolean) => {
+      if (!user?.id) return;
+      const setters: Record<string, (v: boolean) => void> = {
+        email_alerts_enabled: setNotifEmailAlerts,
+        portfolio_daily_digest: setNotifDailyDigest,
+        weekly_summary: setNotifWeeklySummary,
+      };
+      setters[field](value);
+      const { error } = await supabase
+        .from("profiles")
+        .update({ [field]: value })
+        .eq("id", user.id);
+      if (error) {
+        setters[field](!value);
+        const isTable = error.code === "42P01" || error.message?.includes("does not exist");
+        if (isTable) setMigrationNeeded(true);
+        toast({
+          title: isTable ? "Database not set up" : "Save failed",
+          description: isTable
+            ? "Run the migration SQL first — see the banner at the top."
+            : "Could not update preference.",
+          variant: "destructive",
+        });
+      }
+    },
+    [supabase, user?.id, toast, setMigrationNeeded]
+  );
+
+  const handleSendPasswordReset = async () => {
+    if (!profileEmail) return;
+    setIsSendingReset(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(profileEmail, {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    });
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setResetSent(true);
+      toast({ title: "Email sent", description: "Check your inbox for a password reset link." });
+    }
+    setIsSendingReset(false);
+  };
+
+  const handleSignOutAll = async () => {
+    await supabase.auth.signOut({ scope: "global" });
+    await logout();
+    router.push("/login");
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmEmail !== profileEmail) {
+      toast({ title: "Email mismatch", description: "The email you entered doesn't match.", variant: "destructive" });
+      return;
+    }
+    setIsDeleting(true);
+    await supabase.auth.signOut();
+    toast({
+      title: "Account deletion requested",
+      description: "Contact support@polys.app to complete permanent account deletion.",
+    });
+    setIsDeleting(false);
+    setShowDeleteModal(false);
+  };
+
+  const navigateTo = (id: SectionId) => {
+    router.push(`/settings?tab=${id}`);
+  };
+
   if (!shouldShowContent) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground text-small">Loading...</div>
       </div>
     );
   }
 
-  const handleDeleteAccount = () => {
-    if (deleteConfirmEmail !== profile.email) {
-      alert("Email doesn't match");
-      return;
-    }
+  const userTier = user?.tier ?? "free";
 
-    setIsDeleting(true);
-    setTimeout(() => {
-      setIsDeleting(false);
-      setShowDeleteModal(false);
-      alert("Account scheduled for deletion");
-    }, 1500);
-  };
+  const initials = profileName
+    ? profileName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : profileEmail
+    ? profileEmail[0].toUpperCase()
+    : "?";
 
-  const navigateToSection = (sectionId: string | null) => {
-    if (sectionId) {
-      window.history.pushState({}, "", `/settings?tab=${sectionId}`);
-    } else {
-      window.history.pushState({}, "", "/settings");
-    }
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  };
+  const sectionContent: Record<SectionId, React.ReactNode> = {
+    profile: (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Avatar className="h-16 w-16 shrink-0">
+            <AvatarFallback className="bg-primary text-primary-foreground text-title font-semibold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="text-body font-semibold">{profileName || "—"}</p>
+            <p className="text-caption text-muted-foreground">{profileEmail}</p>
+          </div>
+        </div>
 
-  const renderSectionContent = () => {
-    switch (activeSection) {
-      case "profile":
-        return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
-            <div className="flex items-center gap-4 mb-6">
-              <Avatar className="h-16 w-16">
-                <AvatarFallback className="bg-primary text-primary-foreground text-title">
-                  {profile.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase()
-                    .slice(0, 2)}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <Button variant="outline" size="sm">
-                  Change Avatar
-                </Button>
-                <p className="text-caption text-muted-foreground mt-1">JPG, PNG. Max 2MB</p>
-              </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-body">Personal Information</CardTitle>
+            <CardDescription>Update your display name and regional settings</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Display Name</Label>
+              <Input
+                id="name"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="Your name"
+              />
             </div>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Display Name</Label>
-                <Input
-                  id="name"
-                  value={profile.name}
-                  onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                />
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <div className="flex gap-2 items-center">
+                <Input id="email" value={profileEmail} disabled className="flex-1" />
+                <Badge variant="secondary" className="shrink-0 gap-1">
+                  <Check weight="bold" className="h-3 w-3" />
+                  Verified
+                </Badge>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="flex gap-2">
-                  <Input id="email" value={profile.email} disabled className="flex-1" />
-                  <Badge variant="secondary" className="shrink-0">
-                    <Check weight="bold" className="h-3 w-3 mr-1" />
-                    Verified
-                  </Badge>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Timezone</Label>
-                <Select
-                  value={profile.timezone}
-                  onValueChange={(v) => setProfile({ ...profile, timezone: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="America/New_York">Eastern Time (ET)</SelectItem>
-                    <SelectItem value="America/Chicago">Central Time (CT)</SelectItem>
-                    <SelectItem value="America/Denver">Mountain Time (MT)</SelectItem>
-                    <SelectItem value="America/Los_Angeles">Pacific Time (PT)</SelectItem>
-                    <SelectItem value="Europe/London">London (GMT)</SelectItem>
-                    <SelectItem value="Asia/Tokyo">Tokyo (JST)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <p className="text-caption text-muted-foreground">Email address cannot be changed here.</p>
             </div>
-
-            <Button className="mt-4">Save Changes</Button>
-          </motion.div>
-        );
-
-      case "security":
-        return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-body">Two-Factor Authentication</CardTitle>
-                <CardDescription>Add an extra layer of security</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-small font-medium">Status: Not enabled</p>
-                    <p className="text-caption text-muted-foreground">
-                      Protect your account with 2FA
-                    </p>
-                  </div>
-                  <Button variant="outline">Enable 2FA</Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-body">Active Sessions</CardTitle>
-                <CardDescription>Manage your active sessions</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                  <div>
-                    <p className="text-small font-medium">Current Session</p>
-                    <p className="text-caption text-muted-foreground">
-                      Chrome on macOS • Last active now
-                    </p>
-                  </div>
-                  <Badge variant="secondary">Active</Badge>
-                </div>
-                <Button variant="outline" size="sm">
-                  Sign out all other sessions
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="text-body text-destructive">Danger Zone</CardTitle>
-                <CardDescription>Irreversible actions</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-small font-medium">Delete Account</p>
-                    <p className="text-caption text-muted-foreground">
-                      Permanently delete your account and all data
-                    </p>
-                  </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setShowDeleteModal(true)}
-                  >
-                    Delete Account
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        );
-
-      case "notifications":
-        return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-body">Alert Notifications</CardTitle>
-                <CardDescription>How you receive alert notifications</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-small font-medium">Email notifications</p>
-                    <p className="text-caption text-muted-foreground">Receive alerts via email</p>
-                  </div>
-                  <Switch
-                    checked={notifications.alertsEmail}
-                    onCheckedChange={(checked) =>
-                      setNotifications({ ...notifications, alertsEmail: checked })
-                    }
-                  />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-small font-medium">Push notifications</p>
-                    <p className="text-caption text-muted-foreground">
-                      Receive alerts on your device
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifications.alertsPush}
-                    onCheckedChange={(checked) =>
-                      setNotifications({ ...notifications, alertsPush: checked })
-                    }
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-body">Portfolio Updates</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-small font-medium">Daily digest</p>
-                    <p className="text-caption text-muted-foreground">
-                      Summary of daily performance
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifications.portfolioDaily}
-                    onCheckedChange={(checked) =>
-                      setNotifications({ ...notifications, portfolioDaily: checked })
-                    }
-                  />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-small font-medium">Weekly summary</p>
-                    <p className="text-caption text-muted-foreground">Weekly performance report</p>
-                  </div>
-                  <Switch
-                    checked={notifications.portfolioWeekly}
-                    onCheckedChange={(checked) =>
-                      setNotifications({ ...notifications, portfolioWeekly: checked })
-                    }
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        );
-
-      case "billing":
-        return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-body">Current Plan</CardTitle>
-                <CardDescription>Manage your subscription</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg bg-secondary/50 mb-6">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-subtitle font-semibold capitalize">{userTier} Plan</span>
-                      {userTier === "pro" && <Badge>Current</Badge>}
-                    </div>
-                    <p className="text-caption text-muted-foreground">
-                      {userTier === "free" ? "Free forever" : "Next billing: Feb 5, 2026"}
-                    </p>
-                  </div>
-                  <Button asChild>
-                    <Link href="/pricing">View All Plans</Link>
-                  </Button>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  {plans.map((plan) => (
-                    <div
-                      key={plan.id}
-                      className={`p-4 rounded-lg border transition-base ${
-                        userTier === plan.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      {plan.popular && <Badge className="mb-2">Most Popular</Badge>}
-                      <h4 className="text-body font-semibold">{plan.name}</h4>
-                      <div className="flex items-baseline gap-1 my-2">
-                        <span className="text-title font-bold">{plan.price}</span>
-                        <span className="text-caption text-muted-foreground">{plan.period}</span>
-                      </div>
-                      <ul className="space-y-1 mb-4">
-                        {plan.features.map((feature) => (
-                          <li key={feature} className="flex items-center gap-2 text-caption">
-                            <Check weight="bold" className="h-3 w-3 text-primary" />
-                            {feature}
-                          </li>
-                        ))}
-                      </ul>
-                      <Button
-                        variant={userTier === plan.id ? "secondary" : "outline"}
-                        size="sm"
-                        className="w-full"
-                        onClick={() => setUserTier(plan.id)}
-                        disabled={userTier === plan.id}
-                      >
-                        {userTier === plan.id ? "Current Plan" : "Select"}
-                      </Button>
-                    </div>
+            <div className="space-y-2">
+              <Label htmlFor="timezone">
+                <span className="flex items-center gap-1.5">
+                  <Timer className="h-3.5 w-3.5" />
+                  Timezone
+                </span>
+              </Label>
+              <Select value={profileTimezone} onValueChange={setProfileTimezone}>
+                <SelectTrigger id="timezone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONES.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleSaveProfile} disabled={isSavingProfile} className="mt-2">
+              {isSavingProfile ? "Saving…" : "Save Changes"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    security: (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-body">Password & Authentication</CardTitle>
+            <CardDescription>Manage your login credentials</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-small font-medium">Change Password</p>
+                <p className="text-caption text-muted-foreground">
+                  {resetSent
+                    ? "Reset email sent — check your inbox."
+                    : "Send a secure reset link to your email address."}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSendPasswordReset}
+                disabled={isSendingReset || resetSent}
+                className="shrink-0"
+              >
+                <Lock className="h-4 w-4 mr-2" />
+                {resetSent ? "Email Sent" : isSendingReset ? "Sending…" : "Send Reset Email"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-body">Active Sessions</CardTitle>
+            <CardDescription>Devices currently signed in to your account</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border">
+              <div>
+                <p className="text-small font-medium">Current Session</p>
+                <p className="text-caption text-muted-foreground">
+                  {profileEmail}
+                  {user?.lastSignInAt && (
+                    <>
+                      {" "}&bull;{" "}Last sign-in{" "}
+                      {new Date(user.lastSignInAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </>
+                  )}
+                </p>
+              </div>
+              <Badge variant="secondary">Active</Badge>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleSignOutAll} className="gap-2">
+              <SignOut className="h-4 w-4" />
+              Sign Out All Devices
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-destructive/30">
+          <CardHeader>
+            <CardTitle className="text-body text-destructive">Danger Zone</CardTitle>
+            <CardDescription>Irreversible and destructive actions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-small font-medium">Delete Account</p>
+                <p className="text-caption text-muted-foreground">
+                  Permanently remove your account and all associated data.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDeleteModal(true)}
+                className="shrink-0"
+              >
+                Delete Account
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    notifications: (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-body">Alert Notifications</CardTitle>
+            <CardDescription>Choose how you receive alerts about market movements</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-0 divide-y divide-border">
+            <div className="flex items-center justify-between py-4">
+              <div>
+                <p className="text-small font-medium">Email notifications</p>
+                <p className="text-caption text-muted-foreground">Receive triggered alerts via email</p>
+              </div>
+              <Switch
+                checked={notifEmailAlerts}
+                onCheckedChange={(v) => handleToggle("email_alerts_enabled", v)}
+              />
+            </div>
+            <div className="flex items-center justify-between py-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-small font-medium">Push notifications</p>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">Coming soon</Badge>
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        );
+                <p className="text-caption text-muted-foreground">Browser push alerts (not yet available)</p>
+              </div>
+              <Switch checked={false} disabled />
+            </div>
+          </CardContent>
+        </Card>
 
-      case "appearance":
-        return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-body">Theme</CardTitle>
-                <CardDescription>Customize how PolyPro looks</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <button
-                  onClick={() => setTheme("light")}
-                  className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
-                    theme === "light"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-body">Account Updates</CardTitle>
+            <CardDescription>Periodic summaries and digests sent to your email</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-0 divide-y divide-border">
+            <div className="flex items-center justify-between py-4">
+              <div>
+                <p className="text-small font-medium">Daily digest</p>
+                <p className="text-caption text-muted-foreground">
+                  Morning summary of your portfolio performance
+                </p>
+              </div>
+              <Switch
+                checked={notifDailyDigest}
+                onCheckedChange={(v) => handleToggle("portfolio_daily_digest", v)}
+              />
+            </div>
+            <div className="flex items-center justify-between py-4">
+              <div>
+                <p className="text-small font-medium">Weekly market summary</p>
+                <p className="text-caption text-muted-foreground">
+                  Sunday roundup of top market movements
+                </p>
+              </div>
+              <Switch
+                checked={notifWeeklySummary}
+                onCheckedChange={(v) => handleToggle("weekly_summary", v)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    billing: (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-body">Current Plan</CardTitle>
+            <CardDescription>Your active subscription and included features</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border border-border bg-secondary/30 mb-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-subtitle font-semibold">
+                    {PLANS.find((p) => p.id === userTier)?.name ?? "Explorer"} Plan
+                  </span>
+                  <Badge>Active</Badge>
+                </div>
+                <p className="text-caption text-muted-foreground">
+                  {userTier === "free"
+                    ? "You are on the free plan."
+                    : "Manage your subscription via the billing portal."}
+                </p>
+              </div>
+              <Button asChild variant="outline" className="shrink-0">
+                <Link href="/pricing">View All Plans</Link>
+              </Button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {PLANS.map((plan) => {
+                const isActive = userTier === plan.id;
+                return (
+                  <div
+                    key={plan.id}
+                    className={`p-4 rounded-xl border transition-colors ${
+                      isActive
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40"
+                    }`}
+                  >
+                    {"popular" in plan && plan.popular && (
+                      <Badge className="mb-2 text-[10px]">Most Popular</Badge>
+                    )}
+                    <h4 className="text-body font-semibold">{plan.name}</h4>
+                    <div className="flex items-baseline gap-1 my-2">
+                      <span className="text-title font-bold">{plan.price}</span>
+                      <span className="text-caption text-muted-foreground">{plan.period}</span>
+                    </div>
+                    <ul className="space-y-1.5 mb-4">
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex items-center gap-2 text-caption">
+                          <Check weight="bold" className="h-3 w-3 text-primary shrink-0" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      variant={isActive ? "secondary" : "outline"}
+                      size="sm"
+                      className="w-full"
+                      disabled={isActive}
+                      asChild={!isActive}
+                    >
+                      {isActive ? (
+                        <span>Current Plan</span>
+                      ) : (
+                        <Link href="/pricing">Upgrade</Link>
+                      )}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    appearance: (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-body">Theme</CardTitle>
+            <CardDescription>Choose how Polys looks on your device</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(
+              [
+                {
+                  id: "light",
+                  label: "Light",
+                  desc: "A clean, bright interface",
+                  icon: <Sun weight="duotone" className="h-6 w-6 text-amber-500" />,
+                  preview: "bg-white border-zinc-200",
+                },
+                {
+                  id: "dark",
+                  label: "Dark",
+                  desc: "Easier on the eyes in low light",
+                  icon: <Moon weight="duotone" className="h-6 w-6 text-blue-400" />,
+                  preview: "bg-zinc-900 border-zinc-700",
+                },
+                {
+                  id: "system",
+                  label: "System",
+                  desc: "Matches your device preference",
+                  icon: <Monitor weight="duotone" className="h-6 w-6 text-muted-foreground" />,
+                  preview: "bg-secondary border-border",
+                },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setTheme(opt.id)}
+                className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-colors text-left ${
+                  theme === opt.id
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40"
+                }`}
+              >
+                <div
+                  className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${opt.preview}`}
                 >
-                  <div className="w-12 h-12 rounded-xl bg-white border border-zinc-200 flex items-center justify-center shadow-sm shrink-0">
-                    <Sun weight="duotone" className="h-6 w-6 text-amber-500" />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <span className="text-body font-medium">Light</span>
-                    <p className="text-caption text-muted-foreground">A clean, bright appearance</p>
-                  </div>
-                  {theme === "light" && (
-                    <Check weight="bold" className="h-5 w-5 text-primary shrink-0" />
-                  )}
-                </button>
+                  {opt.icon}
+                </div>
+                <div className="flex-1">
+                  <p className="text-body font-medium">{opt.label}</p>
+                  <p className="text-caption text-muted-foreground">{opt.desc}</p>
+                </div>
+                {theme === opt.id && (
+                  <Check weight="bold" className="h-5 w-5 text-primary shrink-0" />
+                )}
+              </button>
+            ))}
+          </CardContent>
+        </Card>
 
-                <button
-                  onClick={() => setTheme("dark")}
-                  className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
-                    theme === "dark"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center shrink-0">
-                    <Moon weight="duotone" className="h-6 w-6 text-blue-400" />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <span className="text-body font-medium">Dark</span>
-                    <p className="text-caption text-muted-foreground">
-                      Easier on the eyes in low light
-                    </p>
-                  </div>
-                  {theme === "dark" && (
-                    <Check weight="bold" className="h-5 w-5 text-primary shrink-0" />
-                  )}
-                </button>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-body">
+              <span className="flex items-center gap-2">
+                <ArrowsDownUp className="h-4 w-4" />
+                Display Density
+              </span>
+            </CardTitle>
+            <CardDescription>Control how compact or spacious the interface feels</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(
+              [
+                { id: "comfortable", label: "Comfortable", desc: "More spacing between elements (default)" },
+                { id: "compact", label: "Compact", desc: "Tighter layout to see more at once" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setDensity(opt.id)}
+                className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-colors text-left ${
+                  density === opt.id
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40"
+                }`}
+              >
+                <div>
+                  <p className="text-body font-medium">{opt.label}</p>
+                  <p className="text-caption text-muted-foreground">{opt.desc}</p>
+                </div>
+                {density === opt.id && (
+                  <Check weight="bold" className="h-5 w-5 text-primary shrink-0" />
+                )}
+              </button>
+            ))}
+          </CardContent>
+        </Card>
 
-                <button
-                  onClick={() => setTheme("system")}
-                  className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
-                    theme === "system"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-100 to-indigo-900 border border-border flex items-center justify-center shrink-0">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-indigo-600" />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <span className="text-body font-medium">System</span>
-                    <p className="text-caption text-muted-foreground">
-                      Matches your device settings
-                    </p>
-                  </div>
-                  {theme === "system" && (
-                    <Check weight="bold" className="h-5 w-5 text-primary shrink-0" />
-                  )}
-                </button>
-              </CardContent>
-            </Card>
-          </motion.div>
-        );
-
-      default:
-        return null;
-    }
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-body">
+              <span className="flex items-center gap-2">
+                <TextAa className="h-4 w-4" />
+                Font Size
+              </span>
+            </CardTitle>
+            <CardDescription>Adjust text size for readability</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(
+              [
+                { id: "normal", label: "Normal", desc: "Default text size" },
+                { id: "large", label: "Large", desc: "Larger text for improved readability" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setFontSize(opt.id)}
+                className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-colors text-left ${
+                  fontSize === opt.id
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40"
+                }`}
+              >
+                <div>
+                  <p className="text-body font-medium">{opt.label}</p>
+                  <p className="text-caption text-muted-foreground">{opt.desc}</p>
+                </div>
+                {fontSize === opt.id && (
+                  <Check weight="bold" className="h-5 w-5 text-primary shrink-0" />
+                )}
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    ),
   };
 
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
       <main className="pt-[120px] md:pt-[88px] pb-20 md:pb-0 min-h-screen">
-        <div className="p-4 md:p-6 lg:p-8 max-w-4xl mx-auto">
-          <AnimatePresence mode="wait">
-            {!activeSection ? (
-              <motion.div
-                key="menu"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-4 md:space-y-6"
-              >
-                {/* Header */}
-                <div>
-                  <h1 className="text-title md:text-display font-bold">Settings</h1>
-                  <p className="text-small text-muted-foreground mt-1">
-                    Manage your account preferences
-                  </p>
-                </div>
+        <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
+          {/* Page header */}
+          <div className="mb-6 md:mb-8">
+            <h1 className="text-title md:text-display font-bold">Settings</h1>
+            <p className="text-small text-muted-foreground mt-1">
+              Manage your account preferences and configuration
+            </p>
+          </div>
 
-                {/* Settings Sections List */}
-                <div className="space-y-2">
-                  {settingsSections.map((section) => {
+          {/* ── Migration required banner ── */}
+          {migrationNeeded && (
+            <div className="mb-6 p-4 rounded-xl border border-amber-500/40 bg-amber-50 dark:bg-amber-950/20 flex flex-col sm:flex-row gap-4">
+              <Warning weight="fill" className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-2">
+                <p className="text-small font-semibold text-amber-900 dark:text-amber-300">
+                  Database setup required
+                </p>
+                <p className="text-caption text-amber-800 dark:text-amber-400">
+                  Your Supabase database tables haven&apos;t been created yet. Profile editing and
+                  notification preferences won&apos;t save until the migration has been run.
+                </p>
+                <p className="text-caption text-amber-800 dark:text-amber-400">
+                  Open{" "}
+                  <a
+                    href="https://supabase.com/dashboard/project/_/sql/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline font-medium"
+                  >
+                    Supabase SQL Editor
+                  </a>
+                  , paste the contents of{" "}
+                  <code className="font-mono bg-amber-200/50 dark:bg-amber-900/40 px-1 rounded text-[11px]">
+                    supabase/migrations/run_all.sql
+                  </code>{" "}
+                  from your project files, and click Run. This is a one-time setup.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-6 lg:gap-8 items-start">
+            {/* ── Desktop sidebar nav ── */}
+            <aside className="hidden md:flex flex-col w-52 shrink-0 sticky top-[100px]">
+              <nav className="space-y-0.5">
+                {NAV_SECTIONS.map((section) => {
+                  const Icon = section.icon;
+                  const isActive = activeSection === section.id;
+                  return (
+                    <button
+                      key={section.id}
+                      onClick={() => navigateTo(section.id)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                        isActive
+                          ? "bg-secondary text-foreground font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                      }`}
+                    >
+                      <Icon
+                        weight={isActive ? "fill" : "regular"}
+                        className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : ""}`}
+                      />
+                      <span className="text-small">{section.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </aside>
+
+            {/* ── Content area ── */}
+            <div className="flex-1 min-w-0">
+              {/* Mobile: section list (no tab selected) */}
+              {!hasExplicitTab && (
+                <div className="md:hidden space-y-2">
+                  {NAV_SECTIONS.map((section) => {
                     const Icon = section.icon;
                     return (
-                      <motion.button
+                      <button
                         key={section.id}
-                        onClick={() => navigateToSection(section.id)}
-                        className="w-full flex items-center gap-4 p-4 rounded-xl bg-card border border-border hover:border-primary/30 hover:bg-secondary/50 transition-all text-left group"
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.99 }}
+                        onClick={() => navigateTo(section.id)}
+                        className="w-full flex items-center gap-4 p-4 rounded-xl bg-card border border-border hover:border-primary/30 hover:bg-secondary/50 transition-colors text-left"
                       >
-                        <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                          <Icon weight="duotone" className="h-5 w-5" />
+                        <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                          <Icon weight="duotone" className="h-5 w-5 text-primary" />
                         </div>
                         <div className="flex-1">
                           <p className="text-body font-medium">{section.label}</p>
-                          <p className="text-caption text-muted-foreground">
-                            {section.description}
-                          </p>
+                          <p className="text-caption text-muted-foreground">{section.description}</p>
                         </div>
-                        <CaretRight
-                          weight="bold"
-                          className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors"
-                        />
-                      </motion.button>
+                        <span className="text-muted-foreground">›</span>
+                      </button>
                     );
                   })}
                 </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="section"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-4 md:space-y-6"
-              >
-                {/* Back button + Section Header */}
-                <div>
+              )}
+
+              {/* Mobile: section content (tab selected) */}
+              {hasExplicitTab && (
+                <div className="md:hidden">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => navigateToSection(null)}
-                    className="mb-4 -ml-2"
+                    onClick={() => router.push("/settings")}
+                    className="-ml-2 mb-4"
                   >
-                    <CaretLeft weight="bold" className="h-4 w-4 mr-1" />
-                    Back to Settings
+                    ‹ Back to Settings
                   </Button>
-                  <h1 className="text-title md:text-display font-bold">
-                    {settingsSections.find((s) => s.id === activeSection)?.label}
-                  </h1>
-                  <p className="text-small text-muted-foreground mt-1">
-                    {settingsSections.find((s) => s.id === activeSection)?.description}
-                  </p>
+                  <div className="mb-6">
+                    <h2 className="text-subtitle font-semibold">
+                      {NAV_SECTIONS.find((s) => s.id === activeSection)?.label}
+                    </h2>
+                    <p className="text-caption text-muted-foreground">
+                      {NAV_SECTIONS.find((s) => s.id === activeSection)?.description}
+                    </p>
+                  </div>
+                  {sectionContent[activeSection]}
                 </div>
+              )}
 
-                {/* Section Content */}
-                {renderSectionContent()}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              {/* Desktop: always show section content */}
+              <div className="hidden md:block">
+                {sectionContent[activeSection]}
+              </div>
+            </div>
+          </div>
         </div>
       </main>
 
@@ -638,15 +888,15 @@ function SettingsContent() {
             </div>
             <DialogTitle className="text-center">Delete Account</DialogTitle>
             <DialogDescription className="text-center">
-              This action is irreversible. All your data, watchlists, alerts, and settings will be
-              permanently deleted.
+              This action is permanent. All your data, watchlists, alerts, and settings will be
+              deleted. Contact support to complete permanent deletion.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="confirm-email">
-                Type <span className="font-semibold">{profile.email}</span> to confirm
+                Type <span className="font-semibold">{profileEmail}</span> to confirm
               </Label>
               <Input
                 id="confirm-email"
@@ -671,10 +921,10 @@ function SettingsContent() {
             <Button
               variant="destructive"
               onClick={handleDeleteAccount}
-              disabled={isDeleting || deleteConfirmEmail !== profile.email}
+              disabled={isDeleting || deleteConfirmEmail !== profileEmail}
               className="w-full sm:w-auto"
             >
-              {isDeleting ? "Deleting..." : "Delete My Account"}
+              {isDeleting ? "Processing…" : "Delete My Account"}
             </Button>
           </DialogFooter>
         </DialogContent>

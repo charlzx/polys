@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MobileNavTrigger } from "@/components/MobileNav";
+import { Logo } from "@/components/Logo";
 import { useAuth } from "@/hooks/useAuth";
 import {
   MagnifyingGlass,
@@ -33,37 +35,18 @@ import {
 interface PublicHeaderProps {
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
-  onMobileNavOpen: () => void;
+  onMobileNavOpen?: () => void;
 }
 
-// Mock notifications - same as AppHeader
-const mockNotifications = [
-  {
-    id: "1",
-    title: "Market Alert",
-    message: "Bitcoin ETF approval odds increased to 87%",
-    time: "2m ago",
-    unread: true,
-  },
-  {
-    id: "2",
-    title: "Arbitrage Opportunity",
-    message: "3.2% spread detected on Election market",
-    time: "15m ago",
-    unread: true,
-  },
-  {
-    id: "3",
-    title: "Price Alert",
-    message: "Your watched market reached target price",
-    time: "1h ago",
-    unread: false,
-  },
-];
-
-export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen }: PublicHeaderProps) {
+export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen = () => {} }: PublicHeaderProps) {
   const { user, isAuthenticated, logout } = useAuth();
-  const [notifications] = useState(mockNotifications);
+  const router = useRouter();
+  const [notifications] = useState<{ id: string; title: string; message: string; time: string; unread: boolean }[]>([]);
+
+  const handleSignOut = async () => {
+    await logout();
+    router.push("/login");
+  };
   const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
@@ -71,11 +54,8 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
       <div className="container">
         <div className="flex h-14 items-center justify-between gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
-              <span className="text-primary-foreground text-small font-bold">P</span>
-            </div>
-            <span className="text-subtitle font-bold hidden sm:inline">PolyPro</span>
+          <Link href="/" className="flex items-center shrink-0">
+            <Logo size="sm" showWordmark />
           </Link>
 
           {/* Nav Links */}
@@ -84,7 +64,7 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
               Markets
             </Link>
             <Link href="/dashboard" className="text-small text-muted-foreground hover:text-foreground transition-colors">
-              Analytics
+              Dashboard
             </Link>
             <Link href="/arbitrage" className="text-small text-muted-foreground hover:text-foreground transition-colors">
               Arbitrage
@@ -130,29 +110,39 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
                       )}
                     </div>
                     <div className="max-h-[400px] overflow-y-auto">
-                      {notifications.map((notification) => (
-                        <div
-                          key={notification.id}
-                          className={`p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors cursor-pointer ${
-                            notification.unread ? "bg-secondary/30" : ""
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-small font-medium">{notification.title}</span>
-                                {notification.unread && (
-                                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                                )}
+                      {notifications.length === 0 ? (
+                        <div className="p-8 text-center">
+                          <Bell className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+                          <p className="text-small text-muted-foreground">No notifications yet</p>
+                          <p className="text-caption text-muted-foreground/60 mt-1">
+                            You&apos;ll see alerts and market updates here
+                          </p>
+                        </div>
+                      ) : (
+                        notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className={`p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors cursor-pointer ${
+                              notification.unread ? "bg-secondary/30" : ""
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-small font-medium">{notification.title}</span>
+                                  {notification.unread && (
+                                    <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                                  )}
+                                </div>
+                                <p className="text-caption text-muted-foreground">{notification.message}</p>
+                                <span className="text-caption text-muted-foreground/70 mt-1">
+                                  {notification.time}
+                                </span>
                               </div>
-                              <p className="text-caption text-muted-foreground">{notification.message}</p>
-                              <span className="text-caption text-muted-foreground/70 mt-1">
-                                {notification.time}
-                              </span>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </PopoverContent>
                 </Popover>
@@ -197,7 +187,7 @@ export function PublicHeader({ searchQuery = "", onSearchChange, onMobileNavOpen
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive">
+                    <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
                       <SignOut weight="bold" className="mr-2 h-4 w-4" />
                       Sign out
                     </DropdownMenuItem>

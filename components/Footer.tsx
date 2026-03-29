@@ -1,54 +1,48 @@
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Logo } from "@/components/Logo";
 
-const footerLinks = {
-  product: [
-    { label: "Markets", href: "/markets" },
-    { label: "Analytics", href: "/dashboard" },
-    { label: "Arbitrage", href: "/arbitrage" },
-    { label: "Pricing", href: "/pricing" },
-  ],
-  resources: [
-    { label: "Documentation", href: "#" },
-    { label: "API", href: "#" },
-    { label: "Status", href: "#" },
-  ],
-  company: [
-    { label: "About", href: "#" },
-    { label: "Blog", href: "#" },
-    { label: "Careers", href: "#" },
-  ],
-  legal: [
-    { label: "Privacy", href: "#" },
-    { label: "Terms", href: "#" },
-  ],
-};
+const productLinks = [
+  { label: "Markets", href: "/markets" },
+  { label: "Analytics", href: "/dashboard" },
+  { label: "Arbitrage", href: "/arbitrage" },
+  { label: "Pricing", href: "/pricing" },
+];
+
+const companyLinks = [
+  { label: "About", href: "/about" },
+  { label: "Blog", href: "/blog" },
+  { label: "Contact", href: "/contact" },
+  { label: "Terms", href: "/terms" },
+  { label: "Privacy", href: "/privacy" },
+];
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
     <footer className="border-t border-border bg-card/50">
-      <div className="container py-12 md:py-16">
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-8">
-          {/* Brand */}
-          <div className="col-span-2">
-            <Link href="/" className="flex items-center gap-2 mb-4">
-              <span className="text-subtitle font-bold">
-                Poly<span className="text-primary">Pro</span>
-              </span>
+      <div className="container py-10 md:py-12">
+        {/* Three-column grid on desktop, stacked on mobile */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6">
+          {/* Brand column */}
+          <div className="flex flex-col gap-4">
+            <Link href="/" className="flex items-center">
+              <Logo size="sm" showWordmark />
             </Link>
-            <p className="text-small text-muted-foreground mb-6 max-w-xs">
-              Real-time prediction market analytics. Track odds, detect arbitrage, and make data-driven decisions.
+            <p className="text-small text-muted-foreground max-w-xs">
+              Real-time prediction market intelligence across Polymarket and Kalshi.
             </p>
-            <ThemeToggle variant="full" />
+            <div className="mt-auto pt-2">
+              <ThemeToggle variant="full" />
+            </div>
           </div>
 
-          {/* Product */}
+          {/* Product links */}
           <div>
-            <h4 className="text-small font-semibold mb-4">Product</h4>
-            <ul className="space-y-3">
-              {footerLinks.product.map((link) => (
+            <h4 className="text-small font-semibold mb-4 text-foreground">Product</h4>
+            <ul className="space-y-2.5">
+              {productLinks.map((link) => (
                 <li key={link.label}>
                   <Link
                     href={link.href}
@@ -61,45 +55,11 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Resources */}
+          {/* Company links */}
           <div>
-            <h4 className="text-small font-semibold mb-4">Resources</h4>
-            <ul className="space-y-3">
-              {footerLinks.resources.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    href={link.href}
-                    className="text-small text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Company */}
-          <div>
-            <h4 className="text-small font-semibold mb-4">Company</h4>
-            <ul className="space-y-3">
-              {footerLinks.company.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    href={link.href}
-                    className="text-small text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Legal */}
-          <div>
-            <h4 className="text-small font-semibold mb-4">Legal</h4>
-            <ul className="space-y-3">
-              {footerLinks.legal.map((link) => (
+            <h4 className="text-small font-semibold mb-4 text-foreground">Company</h4>
+            <ul className="space-y-2.5">
+              {companyLinks.map((link) => (
                 <li key={link.label}>
                   <Link
                     href={link.href}
@@ -113,14 +73,11 @@ export function Footer() {
           </div>
         </div>
 
-        {/* Bottom bar */}
-        <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
+        {/* Copyright strip */}
+        <div className="mt-10 pt-6 border-t border-border">
           <p className="text-caption text-muted-foreground">
-            {currentYear} PolyPro. All rights reserved.
+            &copy; {currentYear} Polys. All rights reserved.
           </p>
-          <div className="flex items-center gap-6 text-caption text-muted-foreground">
-            <span>Built for traders, by traders</span>
-          </div>
         </div>
       </div>
     </footer>

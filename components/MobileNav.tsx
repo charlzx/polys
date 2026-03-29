@@ -61,7 +61,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
             <div className="flex items-center justify-between h-16 px-4 border-b border-border">
               <Link href="/" className="flex items-center gap-2" onClick={onClose}>
                 <span className="text-subtitle font-bold">
-                  Poly<span className="text-primary">Pro</span>
+                  Poly<span className="text-primary">s</span>
                 </span>
               </Link>
               <motion.button

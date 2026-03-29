@@ -23,7 +23,7 @@ export function useAuthGuard(options?: {
         setIsRedirecting(true);
         // Store the intended destination
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('polypro-return-url', pathname || '/');
+          sessionStorage.setItem('polys-return-url', pathname || '/');
         }
         // Redirect to login
         router.push(options.redirectTo || '/login');
@@ -34,9 +34,8 @@ export function useAuthGuard(options?: {
     }
   }, [isAuthenticated, isLoading, router, pathname, options]);
 
-  // For protected pages: show loading while auth is being checked or redirecting
-  const isCheckingAuth = isLoading || (options?.redirectIfNotAuth && !isAuthenticated && !isRedirecting);
-  const shouldShowContent = !options?.redirectIfNotAuth || (isAuthenticated && !isLoading);
+  const isCheckingAuth = isLoading || isRedirecting || (options?.redirectIfNotAuth && !isAuthenticated);
+  const shouldShowContent = !options?.redirectIfNotAuth || (isAuthenticated && !isLoading && !isRedirecting);
 
   return {
     isAuthenticated,
@@ -49,7 +48,7 @@ export function useAuthGuard(options?: {
       if (!isAuthenticated) {
         if (options?.redirectIfNotAuth) {
           if (typeof window !== 'undefined') {
-            sessionStorage.setItem('polypro-return-url', pathname || '/');
+            sessionStorage.setItem('polys-return-url', pathname || '/');
           }
           router.push(options.redirectTo || '/login');
         } else {
