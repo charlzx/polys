@@ -6,7 +6,6 @@ import { CookieBanner } from "@/components/CookieBanner";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://polys.vercel.app";
 
-export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: {
