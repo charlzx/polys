@@ -1,17 +1,12 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
 import "./globals.css";
 import { Providers } from "../components/providers";
 import { Toaster } from "@/components/ui/toaster";
 import { CookieBanner } from "@/components/CookieBanner";
 
-const geist = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist",
-  display: "swap",
-});
-
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://polys.vercel.app";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: {
@@ -72,7 +67,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className={`${geist.variable} antialiased`}>
+      <body className="antialiased">
         <Providers>
           {children}
           <Toaster />

@@ -78,5 +78,6 @@
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
     "typescript": "^5.8.3"
-  }
+  },
+  "packageManager": "npm@10"
 }

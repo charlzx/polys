@@ -136,7 +136,7 @@ export function AlertEmail({
           {/* Footer */}
           <Hr style={hr} />
           <Text style={footer}>
-            You're receiving this because you set up an alert on{" "}
+            You&apos;re receiving this because you set up an alert on{" "}
             <a href={appUrl} style={footerLink}>
               Polys
             </a>
