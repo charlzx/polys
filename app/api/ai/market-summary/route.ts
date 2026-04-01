@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { requireAuth } from "@/lib/ai-auth";
+import { getAuthenticatedUser } from "@/lib/ai-auth";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GAMMA_API = "https://gamma-api.polymarket.com";
 
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const AI_WINDOW_MS = 60 * 60 * 1000;
+const AI_MAX_PER_USER = 40;
+const AI_MAX_PER_IP = 150;
 
 interface CacheEntry<T> {
   data: T;
@@ -110,8 +114,19 @@ async function fetchMarketFromGamma(id: string): Promise<Record<string, unknown>
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const auth = await getAuthenticatedUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const ip = getClientIp(req);
+  const userRl = checkRateLimit(`ai:summary:user:${auth.id}`, AI_MAX_PER_USER, AI_WINDOW_MS);
+  const ipRl = checkRateLimit(`ai:summary:ip:${ip}`, AI_MAX_PER_IP, AI_WINDOW_MS);
+  if (!userRl.allowed || !ipRl.allowed) {
+    const retryAfterSec = Math.max(userRl.retryAfterSec, ipRl.retryAfterSec);
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSec) } }
+    );
+  }
 
   const { searchParams } = new URL(req.url);
   const marketId = searchParams.get("marketId");

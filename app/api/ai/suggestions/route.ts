@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { requireAuth } from "@/lib/ai-auth";
+import { getAuthenticatedUser } from "@/lib/ai-auth";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const AI_WINDOW_MS = 60 * 60 * 1000;
+const AI_MAX_PER_USER = 30;
+const AI_MAX_PER_IP = 120;
 
 interface CacheEntry<T> {
   data: T;
@@ -38,8 +42,19 @@ function setCache(key: string, data: unknown[]): void {
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const auth = await getAuthenticatedUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const ip = getClientIp(req);
+  const userRl = checkRateLimit(`ai:suggest:user:${auth.id}`, AI_MAX_PER_USER, AI_WINDOW_MS);
+  const ipRl = checkRateLimit(`ai:suggest:ip:${ip}`, AI_MAX_PER_IP, AI_WINDOW_MS);
+  if (!userRl.allowed || !ipRl.allowed) {
+    const retryAfterSec = Math.max(userRl.retryAfterSec, ipRl.retryAfterSec);
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSec) } }
+    );
+  }
 
   if (!GEMINI_API_KEY) {
     return NextResponse.json({ error: "AI features require a GEMINI_API_KEY" }, { status: 503 });
