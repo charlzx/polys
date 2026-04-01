@@ -41,4 +41,11 @@ create index if not exists notifications_user_id_idx on public.notifications (us
 create index if not exists notifications_user_read_idx on public.notifications (user_id, read) where read = false;
 
 -- Enable Realtime for the notifications table (required for live subscriptions)
-alter publication supabase_realtime add table public.notifications;
+do $$ begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'notifications'
+  ) then
+    alter publication supabase_realtime add table public.notifications;
+  end if;
+end $$;
