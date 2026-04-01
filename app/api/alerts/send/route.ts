@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { render } from "@react-email/render";
 import { AlertEmail } from "@/emails/AlertEmail";
+import { isCronAuthorized } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 
@@ -16,15 +17,8 @@ export interface AlertEmailPayload {
   marketUrl?: string;
 }
 
-// Internal-only: requires CRON_SECRET in Authorization header to prevent open relay abuse.
-function isAuthorized(request: Request): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return false;
-  return request.headers.get("authorization") === `Bearer ${cronSecret}`;
-}
-
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

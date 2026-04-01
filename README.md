@@ -50,6 +50,8 @@ GEMINI_API_KEY=
 RESEND_API_KEY=
 ALERTS_FROM_EMAIL=alerts@yourdomain.com
 CRON_SECRET=
+CRON_SECRETS=
+INTERNAL_API_BASE_URL=
 
 # External data
 KALSHI_API_KEY=
@@ -63,6 +65,8 @@ REDDIT_CLIENT_SECRET=
 
 - `SUPABASE_SERVICE_ROLE_KEY` is server-only and required for alert checks/migrations.
 - `CRON_SECRET` is required for protected cron endpoints.
+- `CRON_SECRETS` is optional; comma-separated accepted cron secrets for key rotation.
+- `INTERNAL_API_BASE_URL` should be your canonical app URL (e.g. `https://polys.app`) for server-to-server cron calls.
 - `RESEND_API_KEY` and `ALERTS_FROM_EMAIL` are required to send alert emails.
 - AI endpoints are disabled unless `GEMINI_API_KEY` is set.
 

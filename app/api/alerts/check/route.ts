@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getCronSecretForInternalCall, isCronAuthorized } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 
@@ -37,12 +38,6 @@ interface KalshiMarketSimple {
   ticker: string;
   title: string;
   yesMid: number;
-}
-
-function isAuthorized(request: Request): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return false;
-  return request.headers.get("authorization") === `Bearer ${cronSecret}`;
 }
 
 // Fetch market by explicit ID — ensures lower-volume markets are evaluated correctly
@@ -97,13 +92,13 @@ async function fetchKalshiMarkets(baseUrl: string): Promise<KalshiMarketSimple[]
 // The check engine only marks an alert 'triggered' when this returns true.
 async function sendAlertEmail(
   baseUrl: string,
+  cronSecret: string,
   to: string,
   alert: Alert,
   currentValue: string,
   changeText: string,
   resolvedMarketId: string | null
 ): Promise<boolean> {
-  const cronSecret = process.env.CRON_SECRET ?? "";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? baseUrl;
   const marketId = resolvedMarketId ?? alert.market_id;
   try {
@@ -112,6 +107,7 @@ async function sendAlertEmail(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${cronSecret}`,
+        "x-cron-secret": cronSecret,
       },
       body: JSON.stringify({
         to,
@@ -182,8 +178,13 @@ function findKalshiMatch(kalshiMarkets: KalshiMarketSimple[], keyword: string): 
 }
 
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const cronSecret = getCronSecretForInternalCall(request);
+  if (!cronSecret) {
+    return NextResponse.json({ error: "CRON secret not configured" }, { status: 503 });
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -247,6 +248,32 @@ export async function GET(request: Request) {
   let triggered = 0;
   const cutoffMs = COOLDOWN_MINUTES * 60 * 1000;
   const now = Date.now();
+
+  // Preload user email + email preference maps to avoid two DB calls per alert.
+  const userIds = [...new Set(alerts.map((a) => a.user_id))];
+  const [userResults, profileResult] = await Promise.all([
+    Promise.allSettled(userIds.map((id) => supabase.auth.admin.getUserById(id))),
+    supabase
+      .from("profiles")
+      .select("id,email_alerts_enabled")
+      .in("id", userIds),
+  ]);
+
+  const emailByUserId = new Map<string, string>();
+  userResults.forEach((r, i) => {
+    if (r.status !== "fulfilled") return;
+    const email = r.value.data.user?.email;
+    if (email) {
+      emailByUserId.set(userIds[i], email);
+    }
+  });
+
+  const profileEmailEnabledByUserId = new Map<string, boolean>();
+  if (!profileResult.error && Array.isArray(profileResult.data)) {
+    for (const row of profileResult.data as Array<{ id: string; email_alerts_enabled: boolean | null }>) {
+      profileEmailEnabledByUserId.set(row.id, row.email_alerts_enabled !== false);
+    }
+  }
 
   for (const alert of alerts) {
     // Secondary cooldown guard (60 min) to handle rapid re-arm edge cases
@@ -335,25 +362,22 @@ export async function GET(request: Request) {
 
     if (!shouldFire) continue;
 
-    const { data: userData } = await supabase.auth.admin.getUserById(alert.user_id);
-    const email = userData?.user?.email;
-
-    // Check profile-level email preference (email_alerts_enabled column added in 003_watchlist.sql)
-    let profileEmailEnabled = true;
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("email_alerts_enabled")
-      .eq("id", alert.user_id)
-      .single();
-    if (profileData && profileData.email_alerts_enabled === false) {
-      profileEmailEnabled = false;
-    }
+    const email = emailByUserId.get(alert.user_id);
+    const profileEmailEnabled = profileEmailEnabledByUserId.get(alert.user_id) ?? true;
 
     // Only fire if email delivery succeeds (or email is disabled at alert or profile level).
     // On failure, the alert stays 'active' and retries on the next cron run.
     let emailOk = true;
     if (alert.delivery_email && email && profileEmailEnabled) {
-      emailOk = await sendAlertEmail(origin, email, alert, currentValue, changeText, resolvedMarketId);
+      emailOk = await sendAlertEmail(
+        origin,
+        cronSecret,
+        email,
+        alert,
+        currentValue,
+        changeText,
+        resolvedMarketId
+      );
     }
 
     if (!emailOk) {

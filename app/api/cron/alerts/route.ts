@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getCronSecretForInternalCall, isCronAuthorized } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 
@@ -13,22 +14,26 @@ export const runtime = "nodejs";
 //
 // CRON_SECRET must be set in environment variables.
 
-function isAuthorized(request: Request): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return false;
-  return request.headers.get("authorization") === `Bearer ${cronSecret}`;
-}
-
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { origin } = new URL(request.url);
-  const cronSecret = process.env.CRON_SECRET ?? "";
+  const internalBaseUrl =
+    process.env.INTERNAL_API_BASE_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    new URL(request.url).origin;
 
-  const res = await fetch(`${origin}/api/alerts/check`, {
-    headers: { Authorization: `Bearer ${cronSecret}` },
+  const cronSecret = getCronSecretForInternalCall(request);
+  if (!cronSecret) {
+    return NextResponse.json({ error: "CRON secret not configured" }, { status: 503 });
+  }
+
+  const res = await fetch(`${internalBaseUrl.replace(/\/$/, "")}/api/alerts/check`, {
+    headers: {
+      Authorization: `Bearer ${cronSecret}`,
+      "x-cron-secret": cronSecret,
+    },
   });
 
   if (!res.ok) {

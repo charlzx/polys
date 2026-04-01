@@ -26,6 +26,9 @@ jobs:
           fi
 
           curl -sS --fail-with-body \
+            --retry 2 \
+            --retry-delay 2 \
             -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "X-Cron-Secret: ${CRON_SECRET}" \
             -H "User-Agent: github-actions-cron" \
             "$CRON_URL"
