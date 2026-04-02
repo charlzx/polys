@@ -48,6 +48,9 @@ const ALERT_TYPE_LABELS: Record<string, string> = {
   arbitrage: "Arbitrage",
 };
 
+const ALERTS_TEMPORARILY_DISABLED = true;
+const ALERTS_DISABLED_MESSAGE = "Alerts are temporarily unavailable while we complete backend maintenance.";
+
 export default function AlertsPage() {
   const { shouldShowContent } = useAuthGuard({ redirectIfNotAuth: true });
   const { user } = useAuth();
@@ -95,6 +98,11 @@ export default function AlertsPage() {
   ];
 
   async function handleCreate() {
+    if (ALERTS_TEMPORARILY_DISABLED) {
+      setCreateError(ALERTS_DISABLED_MESSAGE);
+      return;
+    }
+
     setCreateError(null);
     if (!newAlert.name.trim()) {
       setCreateError("Please enter a name for the alert.");
@@ -140,10 +148,13 @@ export default function AlertsPage() {
               <p className="text-small text-muted-foreground mt-1">
                 Get notified by email when market conditions match your criteria
               </p>
+              {ALERTS_TEMPORARILY_DISABLED && (
+                <p className="text-caption text-muted-foreground mt-2">{ALERTS_DISABLED_MESSAGE}</p>
+              )}
             </div>
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button disabled={ALERTS_TEMPORARILY_DISABLED} title={ALERTS_DISABLED_MESSAGE}>
                   <Plus weight="bold" className="h-4 w-4 mr-2" />
                   Create Alert
                 </Button>
@@ -241,7 +252,11 @@ export default function AlertsPage() {
                   <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleCreate} disabled={isSubmitting}>
+                  <Button
+                    onClick={handleCreate}
+                    disabled={isSubmitting || ALERTS_TEMPORARILY_DISABLED}
+                    title={ALERTS_DISABLED_MESSAGE}
+                  >
                     {isSubmitting ? "Creating…" : "Create Alert"}
                   </Button>
                 </DialogFooter>
@@ -302,7 +317,7 @@ export default function AlertsPage() {
                 <p className="text-small text-muted-foreground mb-4">
                   Create your first alert to stay informed about market movements
                 </p>
-                <Button onClick={() => setIsCreateOpen(true)}>
+                <Button disabled={ALERTS_TEMPORARILY_DISABLED} title={ALERTS_DISABLED_MESSAGE}>
                   <Plus weight="bold" className="h-4 w-4 mr-2" />
                   Create Alert
                 </Button>

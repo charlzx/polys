@@ -60,6 +60,9 @@ import {
   AreaChart,
 } from "recharts";
 
+const ALERTS_TEMPORARILY_DISABLED = true;
+const ALERTS_DISABLED_MESSAGE = "Alerts are temporarily unavailable while we complete backend maintenance.";
+
 // Volatility indicator component
 function VolatilityIndicator({ level, momentum }: { level: 'low' | 'medium' | 'high'; momentum: 'bullish' | 'bearish' | 'neutral' }) {
   const colors = {
@@ -404,6 +407,10 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
   const [alertSuccess, setAlertSuccess] = useState(false);
 
   function openAlertDialog() {
+    if (ALERTS_TEMPORARILY_DISABLED) {
+      return;
+    }
+
     setAlertName(market?.name ? `Alert: ${market.name.slice(0, 40)}` : "New Alert");
     setAlertType("odds");
     setAlertThreshold("10");
@@ -415,6 +422,10 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
 
   async function handleCreateAlert(e: React.FormEvent) {
     e.preventDefault();
+    if (ALERTS_TEMPORARILY_DISABLED) {
+      setAlertError(ALERTS_DISABLED_MESSAGE);
+      return;
+    }
     if (!market) return;
     setAlertSubmitting(true);
     setAlertError(null);
@@ -631,7 +642,11 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   </div>
                   <div className="flex gap-2 flex-wrap">
-                    <Button onClick={openAlertDialog}>
+                    <Button
+                      onClick={openAlertDialog}
+                      disabled={ALERTS_TEMPORARILY_DISABLED}
+                      title={ALERTS_DISABLED_MESSAGE}
+                    >
                       <Bell className="h-4 w-4 mr-2" />
                       Create Alert
                     </Button>
@@ -1003,8 +1018,17 @@ export default function MarketDetailPage({ params }: { params: Promise<{ id: str
                 >
                   Cancel
                 </Button>
-                <Button type="submit" className="flex-1" disabled={alertSubmitting}>
-                  {alertSubmitting ? "Creating…" : "Create Alert"}
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  disabled={alertSubmitting || ALERTS_TEMPORARILY_DISABLED}
+                  title={ALERTS_DISABLED_MESSAGE}
+                >
+                  {ALERTS_TEMPORARILY_DISABLED
+                    ? "Temporarily Disabled"
+                    : alertSubmitting
+                    ? "Creating…"
+                    : "Create Alert"}
                 </Button>
               </div>
             </form>
