@@ -39,6 +39,17 @@ function configuredCronSecrets(): string[] {
   return [...new Set(tokens)];
 }
 
+function providedCronTokens(request: Request): string[] {
+  const authHeaderToken = parseBearerToken(request.headers.get("authorization"));
+  const cronHeaderToken = request.headers.get("x-cron-secret");
+
+  const provided = [authHeaderToken, cronHeaderToken]
+    .map((token) => normalizeCronToken(token))
+    .filter((s): s is string => s !== null);
+
+  return [...new Set(provided)];
+}
+
 export type CronAuthFailureReason =
   | "no_configured_secrets"
   | "missing_request_secret"
@@ -67,11 +78,9 @@ export function getCronAuthDebug(request: Request): CronAuthDebug {
     };
   }
 
-  const authHeaderToken = parseBearerToken(request.headers.get("authorization"));
-  const cronHeaderToken = request.headers.get("x-cron-secret");
-  const provided = normalizeCronToken(authHeaderToken ?? cronHeaderToken);
+  const provided = providedCronTokens(request);
 
-  if (!provided) {
+  if (provided.length === 0) {
     return {
       authorized: false,
       failureReason: "missing_request_secret",
@@ -81,7 +90,8 @@ export function getCronAuthDebug(request: Request): CronAuthDebug {
     };
   }
 
-  if (!secrets.includes(provided)) {
+  const isAuthorized = provided.some((token) => secrets.includes(token));
+  if (!isAuthorized) {
     return {
       authorized: false,
       failureReason: "secret_mismatch",
@@ -105,13 +115,15 @@ export function isCronAuthorized(request: Request): boolean {
 }
 
 export function getCronSecretForInternalCall(request: Request): string | null {
-  const authHeaderToken = parseBearerToken(request.headers.get("authorization"));
-  const normalizedAuthToken = normalizeCronToken(authHeaderToken);
-  if (normalizedAuthToken) return normalizedAuthToken;
-
-  const cronHeaderToken = normalizeCronToken(request.headers.get("x-cron-secret"));
-  if (cronHeaderToken) return cronHeaderToken;
-
   const secrets = configuredCronSecrets();
+  const provided = providedCronTokens(request);
+
+  // Prefer a provided token that matches configured secrets.
+  const matchingProvidedToken = provided.find((token) => secrets.includes(token));
+  if (matchingProvidedToken) return matchingProvidedToken;
+
+  // If no match was found, forward any provided token as a fallback.
+  if (provided.length > 0) return provided[0];
+
   return secrets[0] ?? null;
 }
