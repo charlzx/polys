@@ -6,11 +6,33 @@ function parseBearerToken(value: string | null): string | null {
   return token.length > 0 ? token : null;
 }
 
+function normalizeCronToken(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  let token = value.trim();
+  if (!token) return null;
+
+  // Be lenient with common config mistakes: optional wrapping quotes and
+  // accidental duplicated "Bearer " prefix in stored env values.
+  if (
+    (token.startsWith('"') && token.endsWith('"')) ||
+    (token.startsWith("'") && token.endsWith("'"))
+  ) {
+    token = token.slice(1, -1).trim();
+  }
+
+  if (token.toLowerCase().startsWith("bearer ")) {
+    token = token.slice(7).trim();
+  }
+
+  return token.length > 0 ? token : null;
+}
+
 function configuredCronSecrets(): string[] {
   const raw = process.env.CRON_SECRETS ?? process.env.CRON_SECRET ?? "";
   return raw
-    .split(",")
-    .map((s) => s.trim())
+    .split(/[\n,]/)
+    .map((s) => normalizeCronToken(s))
     .filter(Boolean);
 }
 
@@ -19,8 +41,8 @@ export function isCronAuthorized(request: Request): boolean {
   if (secrets.length === 0) return false;
 
   const authHeaderToken = parseBearerToken(request.headers.get("authorization"));
-  const cronHeaderToken = request.headers.get("x-cron-secret")?.trim() || null;
-  const provided = authHeaderToken ?? cronHeaderToken;
+  const cronHeaderToken = request.headers.get("x-cron-secret");
+  const provided = normalizeCronToken(authHeaderToken ?? cronHeaderToken);
 
   if (!provided) return false;
   return secrets.includes(provided);
@@ -28,9 +50,10 @@ export function isCronAuthorized(request: Request): boolean {
 
 export function getCronSecretForInternalCall(request: Request): string | null {
   const authHeaderToken = parseBearerToken(request.headers.get("authorization"));
-  if (authHeaderToken) return authHeaderToken;
+  const normalizedAuthToken = normalizeCronToken(authHeaderToken);
+  if (normalizedAuthToken) return normalizedAuthToken;
 
-  const cronHeaderToken = request.headers.get("x-cron-secret")?.trim();
+  const cronHeaderToken = normalizeCronToken(request.headers.get("x-cron-secret"));
   if (cronHeaderToken) return cronHeaderToken;
 
   const secrets = configuredCronSecrets();
