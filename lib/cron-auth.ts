@@ -33,7 +33,7 @@ function configuredCronSecrets(): string[] {
   return raw
     .split(/[\n,]/)
     .map((s) => normalizeCronToken(s))
-    .filter(Boolean);
+    .filter((s): s is string => s !== null);
 }
 
 export function isCronAuthorized(request: Request): boolean {
