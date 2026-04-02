@@ -7,6 +7,19 @@ import {
 
 export const runtime = "nodejs";
 
+function toValidBaseUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = new URL(trimmed);
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 // Cron entry-point: fires alert evaluation every 5 minutes.
 //
 // Scheduling options:
@@ -36,27 +49,56 @@ export async function GET(request: Request) {
       );
     }
 
-    const internalBaseUrl =
-      process.env.INTERNAL_API_BASE_URL ??
-      process.env.NEXT_PUBLIC_APP_URL ??
-      new URL(request.url).origin;
+    const requestOrigin = new URL(request.url).origin;
+    const internalBaseUrlCandidates = [
+      toValidBaseUrl(process.env.INTERNAL_API_BASE_URL),
+      toValidBaseUrl(process.env.NEXT_PUBLIC_APP_URL),
+      requestOrigin,
+    ].filter((value, index, arr): value is string => Boolean(value) && arr.indexOf(value) === index);
 
     const cronSecret = getCronSecretForInternalCall(request);
     if (!cronSecret) {
       return NextResponse.json({ error: "CRON secret not configured" }, { status: 503 });
     }
 
-    const res = await fetch(`${internalBaseUrl.replace(/\/$/, "")}/api/alerts/check`, {
-      headers: {
-        Authorization: `Bearer ${cronSecret}`,
-        "x-cron-secret": cronSecret,
-      },
-    });
+    let res: Response | null = null;
+    let lastFetchError: string | null = null;
+
+    for (const baseUrl of internalBaseUrlCandidates) {
+      try {
+        const attempt = await fetch(`${baseUrl}/api/alerts/check`, {
+          headers: {
+            Authorization: `Bearer ${cronSecret}`,
+            "x-cron-secret": cronSecret,
+          },
+        });
+
+        res = attempt;
+        break;
+      } catch (error) {
+        lastFetchError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    if (!res) {
+      return NextResponse.json(
+        {
+          error: "Alert check fetch failed",
+          details: lastFetchError,
+          attemptedBaseUrls: internalBaseUrlCandidates,
+        },
+        { status: 500 }
+      );
+    }
 
     if (!res.ok) {
       const body = await res.text();
       return NextResponse.json(
-        { error: "Alert check failed", details: body, internalBaseUrl },
+        {
+          error: "Alert check failed",
+          details: body,
+          attemptedBaseUrls: internalBaseUrlCandidates,
+        },
         { status: res.status }
       );
     }
