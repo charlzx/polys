@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getCronSecretForInternalCall, isCronAuthorized } from "@/lib/cron-auth";
+import {
+  getCronAuthDebug,
+  getCronSecretForInternalCall,
+  isCronAuthorized,
+} from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 
@@ -16,7 +20,17 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   if (!isCronAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const debug = getCronAuthDebug(request);
+    return NextResponse.json(
+      {
+        error: "Unauthorized",
+        reason: debug.failureReason,
+        configuredSecretCount: debug.configuredSecretCount,
+        hasAuthorizationHeader: debug.hasAuthorizationHeader,
+        hasCronHeader: debug.hasCronHeader,
+      },
+      { status: 401 }
+    );
   }
 
   const internalBaseUrl =
