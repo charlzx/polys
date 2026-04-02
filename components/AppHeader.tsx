@@ -33,7 +33,6 @@ const navTabs = [
   { label: "Whales", href: "/whales", icon: Eye },
   { label: "Arbitrage", href: "/arbitrage", icon: ArrowsClockwise, premium: true },
   { label: "Watchlist", href: "/portfolio", icon: BookmarkSimple },
-  { label: "Alerts", href: "/alerts", icon: Bell },
 ];
 
 interface AppHeaderProps {
@@ -136,7 +135,7 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
                     notifications.map((notification) => (
                       <Link
                         key={notification.id}
-                        href={notification.marketId ? `/markets/${notification.marketId}` : "/alerts"}
+                        href={notification.marketId ? `/markets/${notification.marketId}` : "/dashboard"}
                         onClick={() => setNotificationsOpen(false)}
                         className={cn(
                           "block p-4 border-b border-border/50 hover:bg-secondary/50 transition-colors",
@@ -188,7 +187,7 @@ export function AppHeader({ showSearch = true }: AppHeaderProps) {
                     asChild
                     onClick={() => setNotificationsOpen(false)}
                   >
-                    <Link href="/alerts">View all alerts</Link>
+                    <Link href="/dashboard">View notifications</Link>
                   </Button>
                 </div>
               </PopoverContent>
