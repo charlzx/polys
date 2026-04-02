@@ -28,6 +28,16 @@ function normalizeCronToken(value: string | null | undefined): string | null {
   return token.length > 0 ? token : null;
 }
 
+function tokenFingerprint(token: string): string {
+  // Non-reversible short fingerprint for debugging secret mismatches.
+  let hash = 2166136261;
+  for (let i = 0; i < token.length; i += 1) {
+    hash ^= token.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `fp_${(hash >>> 0).toString(16).padStart(8, "0")}_${token.length}`;
+}
+
 function configuredCronSecrets(): string[] {
   const sources = [process.env.CRON_SECRETS, process.env.CRON_SECRET];
   const tokens = sources
@@ -61,6 +71,8 @@ export type CronAuthDebug = {
   configuredSecretCount: number;
   hasAuthorizationHeader: boolean;
   hasCronHeader: boolean;
+  providedTokenFingerprints: string[];
+  configuredTokenFingerprints: string[];
 };
 
 export function getCronAuthDebug(request: Request): CronAuthDebug {
@@ -75,10 +87,14 @@ export function getCronAuthDebug(request: Request): CronAuthDebug {
       configuredSecretCount: 0,
       hasAuthorizationHeader,
       hasCronHeader,
+      providedTokenFingerprints: [],
+      configuredTokenFingerprints: [],
     };
   }
 
   const provided = providedCronTokens(request);
+  const configuredTokenFingerprints = secrets.map(tokenFingerprint);
+  const providedTokenFingerprints = provided.map(tokenFingerprint);
 
   if (provided.length === 0) {
     return {
@@ -87,6 +103,8 @@ export function getCronAuthDebug(request: Request): CronAuthDebug {
       configuredSecretCount: secrets.length,
       hasAuthorizationHeader,
       hasCronHeader,
+      providedTokenFingerprints,
+      configuredTokenFingerprints,
     };
   }
 
@@ -98,6 +116,8 @@ export function getCronAuthDebug(request: Request): CronAuthDebug {
       configuredSecretCount: secrets.length,
       hasAuthorizationHeader,
       hasCronHeader,
+      providedTokenFingerprints,
+      configuredTokenFingerprints,
     };
   }
 
@@ -107,6 +127,8 @@ export function getCronAuthDebug(request: Request): CronAuthDebug {
     configuredSecretCount: secrets.length,
     hasAuthorizationHeader,
     hasCronHeader,
+    providedTokenFingerprints,
+    configuredTokenFingerprints,
   };
 }
 

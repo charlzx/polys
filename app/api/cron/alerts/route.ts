@@ -19,45 +19,57 @@ export const runtime = "nodejs";
 // CRON_SECRET must be set in environment variables.
 
 export async function GET(request: Request) {
-  if (!isCronAuthorized(request)) {
-    const debug = getCronAuthDebug(request);
+  try {
+    if (!isCronAuthorized(request)) {
+      const debug = getCronAuthDebug(request);
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+          reason: debug.failureReason,
+          configuredSecretCount: debug.configuredSecretCount,
+          hasAuthorizationHeader: debug.hasAuthorizationHeader,
+          hasCronHeader: debug.hasCronHeader,
+          providedTokenFingerprints: debug.providedTokenFingerprints,
+          configuredTokenFingerprints: debug.configuredTokenFingerprints,
+        },
+        { status: 401 }
+      );
+    }
+
+    const internalBaseUrl =
+      process.env.INTERNAL_API_BASE_URL ??
+      process.env.NEXT_PUBLIC_APP_URL ??
+      new URL(request.url).origin;
+
+    const cronSecret = getCronSecretForInternalCall(request);
+    if (!cronSecret) {
+      return NextResponse.json({ error: "CRON secret not configured" }, { status: 503 });
+    }
+
+    const res = await fetch(`${internalBaseUrl.replace(/\/$/, "")}/api/alerts/check`, {
+      headers: {
+        Authorization: `Bearer ${cronSecret}`,
+        "x-cron-secret": cronSecret,
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      return NextResponse.json(
+        { error: "Alert check failed", details: body, internalBaseUrl },
+        { status: res.status }
+      );
+    }
+
+    const result = await res.json();
+    return NextResponse.json({ ok: true, ...result });
+  } catch (error) {
     return NextResponse.json(
       {
-        error: "Unauthorized",
-        reason: debug.failureReason,
-        configuredSecretCount: debug.configuredSecretCount,
-        hasAuthorizationHeader: debug.hasAuthorizationHeader,
-        hasCronHeader: debug.hasCronHeader,
+        error: "Cron execution failed",
+        details: error instanceof Error ? error.message : String(error),
       },
-      { status: 401 }
+      { status: 500 }
     );
   }
-
-  const internalBaseUrl =
-    process.env.INTERNAL_API_BASE_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    new URL(request.url).origin;
-
-  const cronSecret = getCronSecretForInternalCall(request);
-  if (!cronSecret) {
-    return NextResponse.json({ error: "CRON secret not configured" }, { status: 503 });
-  }
-
-  const res = await fetch(`${internalBaseUrl.replace(/\/$/, "")}/api/alerts/check`, {
-    headers: {
-      Authorization: `Bearer ${cronSecret}`,
-      "x-cron-secret": cronSecret,
-    },
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    return NextResponse.json(
-      { error: "Alert check failed", details: body },
-      { status: res.status }
-    );
-  }
-
-  const result = await res.json();
-  return NextResponse.json({ ok: true, ...result });
 }
