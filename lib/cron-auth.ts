@@ -29,11 +29,14 @@ function normalizeCronToken(value: string | null | undefined): string | null {
 }
 
 function configuredCronSecrets(): string[] {
-  const raw = process.env.CRON_SECRETS ?? process.env.CRON_SECRET ?? "";
-  return raw
-    .split(/[\n,]/)
+  const sources = [process.env.CRON_SECRETS, process.env.CRON_SECRET];
+  const tokens = sources
+    .flatMap((value) => (value ?? "").split(/[\n,]/))
     .map((s) => normalizeCronToken(s))
     .filter((s): s is string => s !== null);
+
+  // Keep first-seen order while removing duplicates.
+  return [...new Set(tokens)];
 }
 
 export function isCronAuthorized(request: Request): boolean {
